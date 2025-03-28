@@ -685,7 +685,7 @@ def Change_Interpolated_Cells(final_volume, interpolated_volume, fluid_default_v
 
         
 
-def GET_INTERPOLATED_DOMAIN(sampled_volume, interpolation_mode, output_base_folder_name, fluid_default_value=1, solid_default_value=0):
+def GET_INTERPOLATED_DOMAIN(sampled_volume, interpolation_mode, fluid_default_value=1, solid_default_value=0):
 
     # FOR EACH SUB DOMAIN
     final_volume = sampled_volume.copy()

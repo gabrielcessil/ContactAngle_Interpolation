@@ -137,10 +137,7 @@ for N in N_samples:
             print("Starting computation")
             start_time = time.time()
             
-            interpolated_volume = util.GET_INTERPOLATED_DOMAIN(
-                sampled_volume, 
-                interpolation_mode, 
-                output_base_file_name+title+"/")
+            interpolated_volume = util.GET_INTERPOLATED_DOMAIN(sampled_volume, interpolation_mode)
             
             if make_plots:
                 if volume_shape[0]==1:

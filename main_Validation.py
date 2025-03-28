@@ -114,7 +114,7 @@ for title, (input_file_name, measure_file_name) in input_files.items():
     
     if make_plots:
         pl.Plot_Domain(sampled_volume, 
-                        output_base_folder_name+title+"/"+"sampled_volume", 
+                        output_base_file_name+"sampled_volume", 
                         remove_value=[1],
                         special_labels = {
                             0: (0.5, 0.5, 0.5, 1.0),
@@ -122,7 +122,7 @@ for title, (input_file_name, measure_file_name) in input_files.items():
                         })
         
         pl.Plot_Domain(volume_ground_truth, 
-                        output_base_folder_name+title+"/"+"ground_truth_volume", 
+                        output_base_file_name+"ground_truth_volume", 
                         remove_value=[1],
                         special_labels = {
                             0: (0.5, 0.5, 0.5, 1.0),
@@ -136,10 +136,7 @@ for title, (input_file_name, measure_file_name) in input_files.items():
     print("Starting computation")
     start_time = time.time()
     
-    interpolated_volume = util.GET_INTERPOLATED_DOMAIN(
-        sampled_volume,
-        interpolation_mode, 
-        output_base_file_name+title+"/")
+    interpolated_volume = util.GET_INTERPOLATED_DOMAIN( sampled_volume, interpolation_mode )
     
     stopping_time = time.time()
     print("Ending Computation")
@@ -155,10 +152,7 @@ for title, (input_file_name, measure_file_name) in input_files.items():
         # COMPUTATIONS FOR PLOTS 
         
         # Guided Interpolation: what the interpolation looks like if the samples are perfectly measured (but keeping location)
-        guided_interpolated_volume = util.GET_INTERPOLATED_DOMAIN(
-            guided_sampled_volume, 
-            interpolation_mode, 
-            output_base_file_name+title+"/")
+        guided_interpolated_volume = util.GET_INTERPOLATED_DOMAIN( guided_sampled_volume, interpolation_mode)
     
         surface_mask = surface_volume != fluid_default_value # True -> Interface cell, False -> Internal Solid or Fluid
         samples_mask = (sampled_volume != fluid_default_value) & (sampled_volume != solid_default_value) # True -> Samples cell, False - > Non sample cell 
@@ -232,7 +226,7 @@ for title, (input_file_name, measure_file_name) in input_files.items():
             bins=40, 
             title="Distribution Comparison",
             notable= ground_truth_classes_inDegrees,
-            filename=output_base_file_name+"/"+"histogram",
+            filename=output_base_file_name+"histogram",
             xlim=(0,180)
             )
              
@@ -244,13 +238,13 @@ for title, (input_file_name, measure_file_name) in input_files.items():
              },
             bins=40, 
             title="Distribution of Errors",
-            filename=output_base_file_name+"/"+"error_histogram",
+            filename=output_base_file_name+"error_histogram",
             xlim=(-180, 180)
             )
         
         
         pl.Plot_Domain(interpolated_volume, 
-                       output_base_file_name+"/"+"interpolated", 
+                       output_base_file_name+"interpolated", 
                        remove_value=[1],
                        special_labels = {
                            0: (0.5, 0.5, 0.5, 1.0),
@@ -258,7 +252,7 @@ for title, (input_file_name, measure_file_name) in input_files.items():
                        })
         
         pl.Plot_Domain(guided_interpolated_volume, 
-                       output_base_file_name+"/"+"guided_interpolated", 
+                       output_base_file_name+"guided_interpolated", 
                        remove_value=[1],
                        special_labels = {
                            0: (0.5, 0.5, 0.5, 1.0),
@@ -266,21 +260,21 @@ for title, (input_file_name, measure_file_name) in input_files.items():
                        })
         
         pl.Plot_Domain(interpolation_error_volume_inDegrees, 
-                       output_base_file_name+"/"+"interpolation_error", 
+                       output_base_file_name+"interpolation_error", 
                        remove_value=[-1000],
                        clim=[np.min(interpolation_error_volume_inDegrees), np.max(interpolation_error_volume_inDegrees)],
                        colormap='RdBu',
                        lbpm_class=False)
         
         pl.Plot_Domain(guided_interpolation_error_volume_inDegrees, 
-                       output_base_file_name+"/"+"guided_interpolation_error", 
+                       output_base_file_name+"guided_interpolation_error", 
                        remove_value=[-1000],
                        clim=[np.min(guided_interpolation_error_volume_inDegrees), np.max(guided_interpolation_error_volume_inDegrees)],
                        colormap='RdBu',
                        lbpm_class=False)
         
         pl.Plot_Domain(guidance_error_volume_inDegrees, 
-                       output_base_file_name+"/"+"guidance_error", 
+                       output_base_file_name+"guidance_error", 
                        remove_value=[-1000],
                        clim=[np.min(guidance_error_volume_inDegrees), np.max(guidance_error_volume_inDegrees)],
                        colormap='RdBu',
@@ -332,7 +326,7 @@ for title, (input_file_name, measure_file_name) in input_files.items():
                  },
                 bins=40, 
                 title="Distribution of Errors for Contact Angle of {util.LBPM_class_2_value(gt_class)}",
-                filename=output_base_file_name+"/"+f"error_histogram_{util.LBPM_class_2_value(gt_class)}",
+                filename=output_base_file_name+f"error_histogram_{util.LBPM_class_2_value(gt_class)}",
                 xlim=(-180, 180),
                 color=color
                 )
