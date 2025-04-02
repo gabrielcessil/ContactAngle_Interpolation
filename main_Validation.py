@@ -6,7 +6,6 @@ import time
 
 def load_volume(input_file_name, volume_shape, fluid_default_value):
     """Load the rock volume and return a binary volume representation."""
-    print("Loading file:", input_file_name)
     volume_ground_truth = np.fromfile(input_file_name, dtype=np.uint8).reshape(volume_shape)
     volume_rock = (volume_ground_truth == fluid_default_value).astype(int)
     return volume_ground_truth, volume_rock
@@ -58,9 +57,9 @@ def create_guided_sampled_volume(volume_rock, volume_ground_truth, coordinates):
 #--- USER INPUTS --------------------------------------------------------------
 
 # Method setup
-experiment_id = "val_cris_28032025" # Give the experiment a base name
-interpolation_mode = 'expand_samples' # Use one of: 'nn' 'watershed_grain' 'expand_samples'    
-make_plots = True
+experiment_id = "krig_test" # Give the experiment a base name
+interpolation_mode = 'kriging' # Use one of: 'nn' 'watershed_grain' 'expand_samples'    
+make_plots = False
 
 # Domain setup
 fluid_default_value= 1
@@ -96,6 +95,7 @@ for title, (input_file_name, measure_file_name) in input_files.items():
     valid_mask = filter_valid_measures(measures)
     
     # Compute surface statistics
+    print("Computing surface statistics")
     surface_volume = util.Remove_Internal_Solid(volume_rock)
     compute_surface_stats(surface_volume)
     
@@ -112,11 +112,16 @@ for title, (input_file_name, measure_file_name) in input_files.items():
     
     output_base_file_name = output_base_folder_name+title+"/"
     
+    #sampled_volume = sampled_volume[0:100, 0:100, 0:100]
+    #surface_volume = surface_volume[0:100, 0:100, 0:100]
+    #volume_ground_truth = volume_ground_truth[0:100, 0:100, 0:100]
+    #guided_sampled_volume = guided_sampled_volume[0:100, 0:100, 0:100]
+    
     if make_plots:
         pl.Plot_Domain(sampled_volume, 
                         output_base_file_name+"sampled_volume", 
                         remove_value=[1],
-                        special_labels = {
+                        special_colors = {
                             0: (0.5, 0.5, 0.5, 1.0),
                             1: (0.0, 0.0, 0.0, 1.0)
                         })
@@ -124,12 +129,12 @@ for title, (input_file_name, measure_file_name) in input_files.items():
         pl.Plot_Domain(volume_ground_truth, 
                         output_base_file_name+"ground_truth_volume", 
                         remove_value=[1],
-                        special_labels = {
+                        special_colors = {
                             0: (0.5, 0.5, 0.5, 1.0),
                             1: (0.0, 0.0, 0.0, 1.0)
                         })
     
-    
+        
     
     ###############################################################################
     #--- COMPUTATION --------------------------------------------------------------
@@ -138,8 +143,21 @@ for title, (input_file_name, measure_file_name) in input_files.items():
     
     interpolated_volume = util.GET_INTERPOLATED_DOMAIN( sampled_volume, interpolation_mode )
     
+    import matplotlib.pyplot as plt
+    plt.hist(interpolated_volume)
+    plt.savefig("TEST", dpi=300)
+    
     stopping_time = time.time()
     print("Ending Computation")
+    
+    pl.Plot_Domain(interpolated_volume, 
+                   output_base_file_name+"interpolated", 
+                   remove_value=[1],
+                   special_colors = {
+                       0: (0.5, 0.5, 0.5, 1.0),
+                       1: (0.0, 0.0, 0.0, 1.0)
+                   })
+    
     #------------------------------------------------------------------------------
     ###############################################################################
     
@@ -215,7 +233,7 @@ for title, (input_file_name, measure_file_name) in input_files.items():
         ground_truth_classes_inDegrees = util.LBPM_class_2_value(ground_truth_classes)
         
         
-        
+        print("--Plotting Histograms")
         pl.plot_hist(
             {'Ground Truth': ground_truth_surface_values_inDegrees, 
              'Sampled Ground Truth':ground_truth_sampled_values_inDegrees,
@@ -242,11 +260,11 @@ for title, (input_file_name, measure_file_name) in input_files.items():
             xlim=(-180, 180)
             )
         
-        
+        print("--Plotting Domains")
         pl.Plot_Domain(interpolated_volume, 
                        output_base_file_name+"interpolated", 
                        remove_value=[1],
-                       special_labels = {
+                       special_colors = {
                            0: (0.5, 0.5, 0.5, 1.0),
                            1: (0.0, 0.0, 0.0, 1.0)
                        })
@@ -254,7 +272,7 @@ for title, (input_file_name, measure_file_name) in input_files.items():
         pl.Plot_Domain(guided_interpolated_volume, 
                        output_base_file_name+"guided_interpolated", 
                        remove_value=[1],
-                       special_labels = {
+                       special_colors = {
                            0: (0.5, 0.5, 0.5, 1.0),
                            1: (0.0, 0.0, 0.0, 1.0)
                        })

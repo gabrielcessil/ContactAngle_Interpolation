@@ -9,7 +9,9 @@ from PIL import Image
 from skimage.measure import regionprops, label
 import utilities as util
 
-def Plot_Domain(values, filename, remove_value=[], colormap='cool', clim=[0, 180], lbpm_class=True, special_labels={}):
+
+        
+def Plot_Domain(values, filename, remove_value=[], colormap='cool', clim=[0, 180], lbpm_class=True, special_colors={}):
     """
     Plot a 3D domain from a 3D NumPy array, highlighting:
         - Cells with value 0 as medium grey (0.5, 0.5, 0.5, 1.0)
@@ -48,7 +50,7 @@ def Plot_Domain(values, filename, remove_value=[], colormap='cool', clim=[0, 180
 
     # Separate different cell types
     special_cells = {}
-    for value, color in special_labels.items():
+    for value, color in special_colors.items():
         special_cells[value] = (mesh.extract_cells(np.where(mesh["values"] == value)[0]), color)
 
     
@@ -100,12 +102,7 @@ def Plot_Domain(values, filename, remove_value=[], colormap='cool', clim=[0, 180
 
     plotter.screenshot(filename + ".png")
 
-    # Show and save the visualization
-    #plotter.show()
-    """
-    plotter.screenshot(filename + ".png")
-"""
-def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colormap='cool', show_label=True):
+def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colormap='cool', show_label=True, special_colors={}):
 
     # Ensure the output directory exists
     folder = os.path.dirname(filename)
@@ -148,11 +145,12 @@ def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colorma
     
     # Manage colors
     # Define Grey for 0 and Black for 1
-    
     default_class_colors = {}
-    if 0 in normalized_mapping: default_class_colors[normalized_mapping[0]]: (0.5, 0.5, 0.5, 1.0) # Grey for label 0
-    if 1 in normalized_mapping: default_class_colors[normalized_mapping[1]]: (0.0, 0.0, 0.0, 1.0) # Black for label 1
-  
+    for special_value, special_color in special_colors.items():
+        if special_value in normalized_mapping:
+            default_class_colors[ normalized_mapping[special_value] ] = special_color
+            
+
     # Get colormap from values remaining in mesh
     nonDefault_classes = []
     for value in mesh_unique_values:
@@ -162,7 +160,9 @@ def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colorma
     num_nonDefault_classes = len(nonDefault_classes)
     if num_nonDefault_classes>0:
         colormap = mpl.colormaps[colormap].resampled(num_nonDefault_classes)
-        generated_colors = colormap(np.linspace(0.2, 0.8, num_nonDefault_classes))
+        color_space = np.linspace(1, 0, num_nonDefault_classes+1)[0:-1]
+        color_space = color_space + (color_space[1]-color_space[0])/2
+        generated_colors = colormap(color_space)
     
     # Assign colors to mesh classes 
     scalar_colors = {}
@@ -171,7 +171,7 @@ def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colorma
         if val in default_class_colors:  # Use predefined colors for 0 and 1
             scalar_colors[val] = mcolors.to_hex(default_class_colors[val], keep_alpha=True)
         else:
-            color = generated_colors[color_index] # Get first color
+            color = generated_colors[color_index] # Get color from colormap
             scalar_colors[val] = mcolors.to_hex(color, keep_alpha=True)
             color_index +=1
     
@@ -222,7 +222,6 @@ def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colorma
             clim=[0, 1] # Influences the color setting
         )
         
-
     # Add axis indicators
     plotter.add_axes(
         line_width=5,
@@ -262,18 +261,6 @@ def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colorma
 
 
 def plot_hist(data, bins=30, title='Histogram', filename=None, notable=[], xlim=(), ylim=(), color='blue'):
-    """
-    Plots separate histograms for each dataset provided. Supports both nested dictionaries (for overlapping histograms) 
-    and lists/arrays (for simple histograms without overlap).
-
-    Args:
-        data_dict (dict): Dictionary where keys are categories and values can be:
-            - A list/array representing a single dataset for a simple histogram.
-        bins (int, optional): Number of bins for the histogram. Defaults to 30.
-        title (str, optional): Title of the plot. Defaults to 'Histogram'.
-        filename (str, optional): Filename to save the figure. If None, the figure is not saved.
-        notable (list, optional): List of notable x-values to highlight with vertical dashed lines.
-    """
     
     num_main_categories = len(data)
     
