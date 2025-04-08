@@ -11,7 +11,7 @@ import utilities as util
 
 
         
-def Plot_Domain(values, filename, remove_value=[], colormap='cool', clim=[0, 180], lbpm_class=True, special_colors={}):
+def Plot_Domain(values, filename, remove_value=[], colormap='cool', lbpm_class=True, special_colors={}):
     """
     Plot a 3D domain from a 3D NumPy array, highlighting:
         - Cells with value 0 as medium grey (0.5, 0.5, 0.5, 1.0)
@@ -39,7 +39,7 @@ def Plot_Domain(values, filename, remove_value=[], colormap='cool', clim=[0, 180
 
     # Assign cell values
     grid.cell_data["values"] = values.flatten(order="F")
-
+    
     # Convert to an unstructured grid for filtering
     mesh = grid.cast_to_unstructured_grid()
 
@@ -103,13 +103,12 @@ def Plot_Domain(values, filename, remove_value=[], colormap='cool', clim=[0, 180
     plotter.screenshot(filename + ".png")
 
 def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colormap='cool', show_label=True, special_colors={}):
-
     # Ensure the output directory exists
     folder = os.path.dirname(filename)
     if folder and not os.path.exists(folder):
         os.makedirs(folder)
 
-    # Create structured grid (ImageData)
+    # CREATE GRID STRUCTURE
     grid = pv.ImageData()
     grid.dimensions = np.array(values.shape) + 1  # Adjust for point-based representation
     grid.origin = (0, 0, 0)  # Set grid origin
@@ -117,25 +116,27 @@ def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colorma
 
 
 
-    # Get values mapped for PyVista
-    unique_classes = np.unique(values)    
-    discrete_linspace_values = np.round(np.linspace(0, 1, len(unique_classes)+1), 5)
-    normalized_mapping = dict(zip(unique_classes, discrete_linspace_values))
+    # MAP ORIGINAL VALUES
+    unique_classes = np.unique(values) 
+    discrete_linspace_values = np.round(np.linspace(0, 1, len(unique_classes)+1), 4)
+    #step = (discrete_linspace_values[1]-discrete_linspace_values[0]
+    normalized_mapping = {key: val + 0.0001 for key, val in zip(unique_classes, discrete_linspace_values)}
+
     denormalization_mapping = {v: k for k, v in normalized_mapping.items()}
     
     
-    
-    # Assign values to cells
-    normalized_values = np.round(np.vectorize(normalized_mapping.get)(values), 5)
-    grid.cell_data["class_values"] = normalized_values.flatten(order="F")
+    # ASSING VALUES TO MESH STRUCTURE
+    mesh_normalized_values = np.round(np.vectorize(normalized_mapping.get)(values), 4)
+    grid.cell_data["class_values"] = mesh_normalized_values.flatten(order="F")
     mesh = grid.cast_to_unstructured_grid()
 
 
-    # Remove unwanted cells: OK
+    # REMOVE UNWATED CELLS
     for removed_value in remove_value:
-        normalized_value_to_remove = normalized_mapping[removed_value]
-        to_remove_mask = np.argwhere(mesh["class_values"] == normalized_value_to_remove)
-        mesh.remove_cells(to_remove_mask.flatten(), inplace=True)
+        if removed_value in normalized_mapping:
+            normalized_value_to_remove = normalized_mapping[removed_value]
+            to_remove_mask = np.argwhere(mesh["class_values"] == normalized_value_to_remove)
+            mesh.remove_cells(to_remove_mask.flatten(), inplace=True)
             
         
     # Unique values in mesh
@@ -143,41 +144,37 @@ def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colorma
     num_mesh_unique_values = len(mesh_unique_values)
     
     
-    # Manage colors
-    # Define Grey for 0 and Black for 1
+    # MANAGE COLORS
+    # Get colormap for custom labels
     default_class_colors = {}
     for special_value, special_color in special_colors.items():
         if special_value in normalized_mapping:
             default_class_colors[ normalized_mapping[special_value] ] = special_color
-            
-
     # Get colormap from values remaining in mesh
     nonDefault_classes = []
     for value in mesh_unique_values:
         if not (value in default_class_colors.keys()):
             nonDefault_classes.append(value)
-            
     num_nonDefault_classes = len(nonDefault_classes)
+    # Make colormap with custom colors
     if num_nonDefault_classes>0:
         colormap = mpl.colormaps[colormap].resampled(num_nonDefault_classes)
         color_space = np.linspace(1, 0, num_nonDefault_classes+1)[0:-1]
-        color_space = color_space + (color_space[1]-color_space[0])/2
+        if num_nonDefault_classes>1:
+            color_space = color_space + (color_space[1]-color_space[0])/2
         generated_colors = colormap(color_space)
-    
-    # Assign colors to mesh classes 
-    scalar_colors = {}
+    color_list = []
     color_index = 0 # Avoid extreme colors (ex:too dark)  
     for val in mesh_unique_values:
         if val in default_class_colors:  # Use predefined colors for 0 and 1
-            scalar_colors[val] = mcolors.to_hex(default_class_colors[val], keep_alpha=True)
+            color = default_class_colors[val]
+            color_list.append(mcolors.to_hex(color, keep_alpha=True))
         else:
             color = generated_colors[color_index] # Get color from colormap
-            scalar_colors[val] = mcolors.to_hex(color, keep_alpha=True)
+            color_list.append(mcolors.to_hex(color, keep_alpha=True))
             color_index +=1
     
-    
-    # Handle automatic annotations placement
-    
+    # MAKE CUSTOM TICKS
     # Evenly distribute tick locations to avoid overlap, even if values are far apart
     if num_nonDefault_classes > 1:
         tick_positions = np.linspace(0, 1, num_mesh_unique_values+1)[0:-1]
@@ -195,14 +192,14 @@ def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colorma
             annotations[tick] = f"            {original_val}"
 
     
-    # Configure the plotter
+    # MAKE THE PLOT
     plotter = pv.Plotter(window_size=[1920, 1080])  # Full HD resolution
     if mesh.n_cells > 0:
         plotter.add_mesh(
             mesh,
             scalars=mesh["class_values"],
             categories=True,
-            cmap= list(scalar_colors.values()),
+            cmap= color_list,
             show_edges=False,
             lighting=True,
             smooth_shading=False,

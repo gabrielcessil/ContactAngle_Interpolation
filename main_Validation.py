@@ -57,9 +57,9 @@ def create_guided_sampled_volume(volume_rock, volume_ground_truth, coordinates):
 #--- USER INPUTS --------------------------------------------------------------
 
 # Method setup
-experiment_id = "krig_test" # Give the experiment a base name
+experiment_id = "krig_test_8Neigh" # Give the experiment a base name
 interpolation_mode = 'kriging' # Use one of: 'nn' 'watershed_grain' 'expand_samples'    
-make_plots = False
+make_plots = True
 
 # Domain setup
 fluid_default_value= 1
@@ -140,13 +140,7 @@ for title, (input_file_name, measure_file_name) in input_files.items():
     #--- COMPUTATION --------------------------------------------------------------
     print("Starting computation")
     start_time = time.time()
-    
     interpolated_volume = util.GET_INTERPOLATED_DOMAIN( sampled_volume, interpolation_mode )
-    
-    import matplotlib.pyplot as plt
-    plt.hist(interpolated_volume)
-    plt.savefig("TEST", dpi=300)
-    
     stopping_time = time.time()
     print("Ending Computation")
     

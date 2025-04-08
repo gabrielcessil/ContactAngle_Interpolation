@@ -3,7 +3,8 @@ import scipy.ndimage as ndi
 from skimage.segmentation import watershed
 from scipy.ndimage import maximum_filter
 from scipy.spatial.distance import pdist
-
+from scipy.spatial.distance import cdist
+from scipy.optimize import least_squares
 import traceback
 
 def is_LBPM_class(value): return value > 73 #value < 0
@@ -319,7 +320,50 @@ def Get_Neighbors(array, i, j, k, connectivity=1, with_coords=False, flag_out_bo
 
     return neighbors
 
+import numpy as np
+from scipy.ndimage import binary_dilation
+"""
+def Remove_Internal_Solid(array, fluid_default_value=1, keep_boundary=False, connectivity=3):
+    # Create a mask for solid voxels
+    solid_mask = array != fluid_default_value
 
+    # Create a structuring element for connectivity
+    if connectivity == 1:
+        structure = np.zeros((3, 3, 3), dtype=bool)
+        structure[1, 1, 0] = structure[1, 1, 2] = True
+        structure[1, 0, 1] = structure[1, 2, 1] = True
+        structure[0, 1, 1] = structure[2, 1, 1] = True
+    elif connectivity == 2:
+        structure = np.ones((3, 3, 3), dtype=bool)
+        structure[0, 0, 0] = structure[0, 0, 2] = structure[0, 2, 0] = structure[0, 2, 2] = False
+        structure[2, 0, 0] = structure[2, 0, 2] = structure[2, 2, 0] = structure[2, 2, 2] = False
+    else:
+        structure = np.ones((3, 3, 3), dtype=bool)  # 26-connected
+
+    # Dilate the fluid region
+    fluid_mask = (array == fluid_default_value)
+    neighbor_fluid_mask = binary_dilation(fluid_mask, structure=structure)
+
+    # Voxels not touching fluid
+    internal_solid_mask = solid_mask & ~neighbor_fluid_mask
+
+    # Optionally keep boundary
+    if keep_boundary:
+        boundary_mask = np.zeros_like(array, dtype=bool)
+        boundary_mask[[0, -1], :, :] = True 
+        boundary_mask[:, [0, -1], :] = True
+        boundary_mask[:, :, [0, -1]] = True
+
+        neighbor_boundary_mask = binary_dilation(boundary_mask, structure=structure)
+        internal_solid_mask = internal_solid_mask & ~neighbor_boundary_mask
+
+    # Replace internal solids with fluid value
+    new_array = array.copy()
+    new_array[internal_solid_mask] = fluid_default_value
+
+    return new_array
+"""
+#"""
 def Remove_Internal_Solid(array, fluid_default_value=1, keep_boundary=False, connectivity=3):
 
     new_array = array.copy()
@@ -343,9 +387,10 @@ def Remove_Internal_Solid(array, fluid_default_value=1, keep_boundary=False, con
             new_array[i, j, k] = fluid_default_value  # mark internal solid as fluid
 
     return new_array
-
-
+#"""
 """
+# C-Like implementation
+
 def Remove_Internal_Solid(array, fluid_default_value=1, keep_boundary=False, connectivity=3):
     # Create array to work on
     new_array = array.copy()
@@ -455,238 +500,245 @@ def WATERSHED_GRAIN_INTERPOLATION(volume, samples_coord, distance_function):
 
     return result 
 
-"""
-from scipy.optimize import curve_fit
-
-def KRIGING_INTERPOLATION(sub_volume, samples_coord, distance_function, N, solid_default_value=0):
-
-    print("KRIGING: ")
-    print("Removing internal solid")
-    samples_values = sub_volume[tuple(np.array(samples_coord).T)]
-
-    hollow_sub_volume = Remove_Internal_Solid(sub_volume)
-
-    domain_solid_coord = np.argwhere(hollow_sub_volume == solid_default_value)
-
-    resampled_volume = sub_volume.copy().astype(float)
-    
-    print("Fitting global variogram model")
-    global_variogram_params = fit_global_variogram(samples_coord, samples_values, distance_function)
-
-    print("Analyzing cell by cell")
-    for domain_x, domain_y, domain_z in domain_solid_coord:
-        
-        
-        domain_point = np.array([domain_x, domain_y, domain_z])
-
-        distances = [distance_function(domain_point, np.array(sample_coord)) for sample_coord in samples_coord]
-
-        nearest_indices = np.argsort(distances)[:N]
-
-        nearest_samples_coord = [samples_coord[i] for i in nearest_indices]
-        nearest_samples_values = [samples_values[i] for i in nearest_indices]
-
-        # 1. Use global variogram model
-        variogram_model = lambda h: linear_variogram(h, *global_variogram_params)
-
-        # 2. Create matrices 
-        A = np.zeros((N, N))
-        b = np.zeros(N)
-
-        for i in range(N):
-            for j in range(N):
-                A[i, j] = variogram_model(distance_function(np.array(nearest_samples_coord[i]), np.array(nearest_samples_coord[j])))
-            b[i] = variogram_model(distance_function(domain_point, np.array(nearest_samples_coord[i])))
-
-        # Solve for weights
-        try:
-            weights = np.linalg.solve(A, b)
-        except np.linalg.LinAlgError:
-            A += np.eye(N) * 1e-6
-            weights = np.linalg.solve(A, b)
-        
-        # 3. Calculate interpolated values
-        interpolated_value = int(np.dot(weights, nearest_samples_values))
-        print(domain_x, domain_y, domain_z, "=", interpolated_value)
-        
-        # 4. Assign value to cell
-        resampled_volume[domain_x, domain_y, domain_z] = interpolated_value
-
-    return resampled_volume
-"""
 
 from scipy.optimize import curve_fit
-from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures import as_completed
 
 import multiprocessing
 from functools import partial
+def parallel_interpolate_task(domain_point, variogram_model, variogram_params, samples_coord, samples_values, distance_function, N,  universal):
+    
+    try:
+        return interpolate_point(
+            variogram_model=variogram_model, 
+            variogram_params=variogram_params, 
+            domain_point=domain_point, 
+            samples_coord=samples_coord, 
+            samples_values=samples_values, 
+            distance_function=distance_function, 
+            N=N, 
+            universal=universal)
+    
+    except Exception as e:
+        error_message = f"Error at point {domain_point}: {e}"
+        traceback_str = traceback.format_exc()
+        return {"error": error_message, "traceback": traceback_str}
 
-def KRIGING_INTERPOLATION(sub_volume, samples_coord, distance_function, N, solid_default_value=0, num_workers=None):
+def KRIGING_INTERPOLATION(sub_volume,
+                          samples_coord, 
+                          distance_function, 
+                          solid_default_value=0, 
+                          num_workers=None, 
+                          model='linear', 
+                          N_neighbors=None, 
+                          universal=True, 
+                          keep_boundary=False,
+                          variogram_sampling=1):
+    
+    
+    sub_volume = sub_volume.astype(float)
 
-    print("KRIGING: ")
-    print("Removing internal solid")
     samples_values = sub_volume[tuple(np.array(samples_coord).T)]
-
-    hollow_sub_volume = Remove_Internal_Solid(sub_volume)
-
+    N_neighbors = len(samples_values)-1 if N_neighbors is None else min(N_neighbors, len(samples_values)-1)
+    
+    
+    hollow_sub_volume = Remove_Internal_Solid(sub_volume, keep_boundary=keep_boundary)
+    
     domain_solid_coord = np.argwhere(hollow_sub_volume == solid_default_value)
-
+    
     resampled_volume = sub_volume.copy().astype(float)
     
-    print("Fitting global variogram model")
-    variogram_model, variogram_params = fit_global_variogram(samples_coord, samples_values, distance_function, mode='spherical')
+    variogram_model, variogram_params = fit_global_variogram(
+        samples_coord, 
+        samples_values, 
+        distance_function,
+        mode=model,
+        keep_fraction=variogram_sampling,
+        )
     
-    N = 5
     # --------------- MULTI-PROCESSING STARTS HERE ---------------
     print(f"Interpolating {len(domain_solid_coord)} cells using {num_workers or 'all'} cores...")
-    # BASIC ATTEMPT
-    """
-    for i, domain_point in enumerate(domain_solid_coord):
-        print(domain_point, f"  |   {i}  / {len(domain_solid_coord)}")
-        domain_x, domain_y, domain_z, interpolated_value = interpolate_point(
-                                                                variogram_model, 
-                                                                variogram_params,
-                                                                domain_point, 
-                                                                samples_coord, 
-                                                                samples_values, 
-                                                                distance_function, 
-                                                                N=5)
-        
-        resampled_volume[domain_x, domain_y, domain_z] = interpolated_value
-    """  
-    # PARALLEL ATTEMPT
-    with multiprocessing.Pool(processes=10) as pool:
-        func = partial(parallel_interpolate_task, 
-                   variogram_model=variogram_model, 
-                   variogram_params=variogram_params, 
-                   samples_coord=samples_coord, 
-                   samples_values=samples_values, 
-                   distance_function=distance_function, 
-                   N=N)
     
-        results = pool.map(func, domain_solid_coord)
+    with multiprocessing.Pool(processes=10) as pool:
+        func = partial(
+            parallel_interpolate_task, 
+            variogram_model=variogram_model, 
+            variogram_params=variogram_params, 
+            samples_coord=samples_coord, 
+            samples_values=samples_values, 
+            distance_function=distance_function, 
+            N=N_neighbors,
+            universal=universal)
         
-    # Efficiently assign results to resampled_volume using NumPy indexing
-    results_array = np.array(results)
-    coords = results_array[:, 0:3].astype(int)  # Ensure coordinates are integers
-    values = results_array[:, 3]
-
-    resampled_volume[tuple(coords.T)] = values
+        results = pool.map(func, domain_solid_coord) # calls func for all listed domain coords
+        
+        if not any(elem is None for elem in results) :
+            print("Multiprocessing finished")
+            # Efficiently assign results to resampled_volume using NumPy indexing
+            results_array = np.array(results)
+            
+            print(results_array)
+            coords = results_array[:, 0:3].astype(int)  # Ensure coordinates are integers
+            values = results_array[:, 3]
+            import matplotlib.pyplot as plt
+            plt.hist(values)
+            plt.show()
+            resampled_volume[tuple(coords.T)] = values
+        else:
+            print("No results from multiprocessed ")
+            
     return resampled_volume
 
-def parallel_interpolate_task(domain_point, variogram_model, variogram_params, samples_coord, samples_values, distance_function, N):
-    return interpolate_point(variogram_model, variogram_params, domain_point, samples_coord, samples_values, distance_function, N)
 
 
 from scipy.sparse.linalg import cg
-def interpolate_point(variogram_model, variogram_params, domain_point, samples_coord, samples_values, distance_function, N):
-    
-    try:
+def interpolate_point(variogram_model, variogram_params, domain_point, samples_coord, samples_values, distance_function, N, universal):
+
+    #try:
         domain_x, domain_y, domain_z = domain_point
+            
         domain_point = np.array([domain_x, domain_y, domain_z])
     
         # Find the N nearest neighbors
         # Compute distances to all sample points
-        #earest_indices = get_nearest_samples_indexes(domain_point, samples_coord, distance_function, N) 
-        nearest_indices = np.argsort([ distance_function(domain_point, point) for point in samples_coord] )[:N]
-        #print(domain_x, domain_y, domain_z)
-        
-        
+        #nearest_indices = get_nearest_samples_indexes(domain_point, samples_coord, distance_function, N) 
+        nearest_indices = np.argsort([ distance_function(domain_point, point) for point in samples_coord] )[:N]    
         nearest_samples_coord = [samples_coord[i] for i in nearest_indices]
         nearest_samples_values = [samples_values[i] for i in nearest_indices]
         
-        #print(nearest_samples_coord)
-        #print(nearest_samples_values)
-            
         # Create matrices
+        N_Samples = len(nearest_indices) # How many samples were indeed considered (it may vary with availability within quadrants)
+        if universal: N_Dim= N_Samples+1
+        else: N_Dim= N_Samples
         
-        N_total = len(nearest_indices) # How many samples were indeed considered (it may vary with availability within quadrants)
-        A = np.zeros((N_total, N_total))
-        b = np.zeros(N_total)
+        A = np.zeros((N_Dim, N_Dim)) # Create matrix with 1 extra columns and row
+        b = np.zeros(N_Dim) # Create array with 1 extra element
         
-        estimate_semivariance = lambda dist: variogram_model(dist, *variogram_params)
-        
-        for i in range(N_total):
-            for j in range(N_total):
-                A[i, j] = estimate_semivariance(distance_function(np.array(nearest_samples_coord[i]), np.array(nearest_samples_coord[j])))
-            b[i] = estimate_semivariance(distance_function(domain_point, np.array(nearest_samples_coord[i])))
+        estimate_semivariance = lambda dist:  np.clip(variogram_model(dist, *variogram_params), a_min=0, a_max=None) 
     
+        for i in range(N_Samples):
+            for j in range(N_Samples):
+                if i==j: 
+                    A[i, j] = 0.0
+                else:
+                    A[i, j] = estimate_semivariance(distance_function(np.array(nearest_samples_coord[i]), np.array(nearest_samples_coord[j])))
+            
+            b[i] = estimate_semivariance(distance_function(domain_point, np.array(nearest_samples_coord[i])))
+            
+            if universal:
+                A[i, -1] = 1.0  # Add 1s for Lagrange multiplier column  # LIKE THIS ONE
+                A[-1, i] = 1.0  # Add 1s for Lagrange multiplier row  # LIKE THIS ONE
+    
+        if universal:
+            A[-1, -1] = 0.0  # Bottom-right corner is zero for the constraint  # LIKE THIS ONE
+            b[-1] = 1.0  # Enforce unbiasedness constraint sum(weights) = 1  # LIKE THIS ONE
+    
+        
         # Solve for weights
-        #print("A: ",A)
-        #print("b: ",b)
-        #print(np.linalg.cond(A))
         try:
             weights = np.linalg.solve(A, b)
-            #weights, conv_flag = cg(A, b)
-            
         except np.linalg.LinAlgError:
-            
+            A += np.eye(N_Dim) * 1e-6
             weights, conv_flag = cg(A, b)
-            if conv_flag == 0:
-                # Adds a small identity matrix to make it non-singular
-                A += np.eye(N_total) * 1e-6
-                weights, conv_flag = cg(A, b)
-                
-                if conv_flag == 0:
-                    return "Error"
-                
-                
-        #print("weights: ", weights)
+            if conv_flag == 0: return None
+                            
         # Compute interpolated value compuitng the values * weights
-        interpolated_value = int(np.dot(weights, nearest_samples_values))
-        
-        print("::::", domain_x, domain_y, domain_z, interpolated_value)
-
+        if universal: interpolated_value = int(np.dot(weights, nearest_samples_values+[0]))
+        else: interpolated_value = int(np.dot(weights, nearest_samples_values))
+            
         return domain_x, domain_y, domain_z, interpolated_value
-    
-    except Exception as e:
-        print("An error occurred:")
-        traceback.print_exc()  # Prints the full error traceback
-        return f"Error: {e}"
+    #except:
+    #    return None
+
 
 import matplotlib.pyplot as plt
-def plot_fitted_variogram(variogram_model,popt,pairwise_distances, semivariances, binned_distances, binned_semivariances, samples_coord, samples_values, distance_function, bins):
-    
-    continuous_distances = np.linspace(0, np.max(binned_distances), 100)
+def plot_fitted_variogram(
+    variogram_model,
+    popt,
+    pairwise_distances,
+    semivariances,
+    binned_distances,
+    binned_semivariances,
+    samples_coord,
+    samples_values,
+    distance_function,
+    bins
+):
+
+    # Continuous line for fitted model
+    continuous_distances = np.linspace(0, np.max(pairwise_distances), 100)
     continuous_semivariances = variogram_model(continuous_distances, *popt)
 
-    # Create figure with two subplots
+    # Create subplots
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    
-    ### **Left Plot: Semivariance vs. Pairwise Distance**
-    for i, bin_edge in enumerate(bins):
-        if i == 0:
-            axes[0].axvline(bin_edge, color="black", linestyle="--", alpha=0.8, label="Lag")  # Bin markers
-        else: 
-            axes[0].axvline(bin_edge, color="black", linestyle="--", alpha=0.8)
-            
-    indices = np.random.choice(range(len(pairwise_distances)), size=min(len(pairwise_distances), (len(bins)-1)*300), replace=False)
-    
-    axes[0].scatter(pairwise_distances[indices], np.log(semivariances[indices]), color="blue", alpha=0.1, label="Raw Semivariance")
+
+    # === LEFT PLOT: Raw semivariance data + bin lines ===
+    for bin_edge in bins:
+        axes[0].axvline(bin_edge, color="black", linestyle="--", alpha=0.8)
+
+    # Downsample for scatter plot if needed
+    indices = np.random.choice(
+        range(len(pairwise_distances)),
+        size=min(len(pairwise_distances), (len(bins)-1) * 300),
+        replace=False
+    )
+
+    axes[0].scatter(
+        pairwise_distances[indices],
+        semivariances[indices],
+        color="blue",
+        alpha=min(1, 10 / len(semivariances)),
+        label="Raw Semivariance"
+    )
+
     axes[0].set_xlabel("Pairwise Distance")
     axes[0].set_ylabel("Semivariance")
-    axes[0].legend(loc="upper center", bbox_to_anchor=(0.5, 1.12), ncol=2, frameon=True)  # Move legend up
-    axes[0].set_xticks(bins)  # Left plot
+    axes[0].legend(loc="upper center", bbox_to_anchor=(0.5, 1.12), ncol=2, frameon=True)
     axes[0].minorticks_on()
     axes[0].grid(which="minor", linestyle=":", linewidth=0.5, color="grey")
+    axes[0].set_xlim([0, max(continuous_distances)])
 
-    ### **Right Plot: Empirical and Fitted Variogram**
+    # === RIGHT PLOT: Binned + fitted model ===
     for bin_edge in bins:
-        axes[1].axvline(bin_edge, color="black", linestyle="--", alpha=0.8)  # Bin markers
-    axes[1].plot(continuous_distances, continuous_semivariances, "k-", label="Fitted Variogram Model")
-    axes[1].plot(binned_distances, binned_semivariances, "r*", markersize=12,label="Average Semivariance per Lag Bin")
-    
+        axes[1].axvline(bin_edge, color="black", linestyle="--", alpha=0.8)
+
+    axes[1].plot(
+        continuous_distances,
+        continuous_semivariances,
+        "k-",
+        label="Fitted Variogram Model"
+    )
+
+    axes[1].plot(
+        binned_distances,
+        binned_semivariances,
+        "r*",
+        markersize=12,
+        label="Average Semivariance per Lag Bin"
+    )
+
     axes[1].set_xlabel("Average Pairwise Distance per Lag Bin")
     axes[1].set_ylabel("Semivariance")
-    axes[1].legend(loc="upper center", bbox_to_anchor=(0.5, 1.12), ncol=2, frameon=True)  # Move legend up
-    axes[1].set_xticks(bins)  # Right plot
+    axes[1].legend(loc="upper center", bbox_to_anchor=(0.5, 1.12), ncol=2, frameon=True)
     axes[1].minorticks_on()
     axes[1].grid(which="minor", linestyle=":", linewidth=0.5, color="grey")
-    
-    fig.suptitle("EMPIRICAL VARIOGRAM",fontsize=15, fontweight="bold")
+    axes[1].set_xlim([0, max(continuous_distances)])
+
+    # === Control number of x-tick labels for readability ===
+    max_labels = min(7, len(bins))
+    label_indices = np.linspace(0, len(bins)-1, max_labels, dtype=int)
+    xtick_positions = [bins[i] for i in label_indices]
+
+    # Set reduced x-ticks
+    axes[0].set_xticks(xtick_positions)
+    axes[0].set_xticklabels([f"{b:.2f}" for b in xtick_positions])
+
+    axes[1].set_xticks(xtick_positions)
+    axes[1].set_xticklabels([f"{b:.2f}" for b in xtick_positions])
+
+    fig.suptitle("EMPIRICAL VARIOGRAM", fontsize=15, fontweight="bold")
     plt.tight_layout()
     plt.show()
+
     
     
 def linear_variogram(h, slope, nugget):
@@ -702,26 +754,37 @@ def gaussian_variogram(h, sill, range_, nugget):
     """Gaussian variogram model."""
     return nugget + sill * (1 - np.exp(-3 * (h / range_)**2))
 
-def fit_global_variogram(samples_coord, samples_values, distance_function, n_bins=30, mode='linear'):
+def fit_global_variogram(samples_coord, samples_values, distance_function, mode, keep_fraction):
     """Fits a global linear variogram to all samples, using pairwise distance computation."""
     
     # Convert to numpy arrays for efficient manipulation
-    samples_coord = np.array(samples_coord)
-    samples_values = np.array(samples_values)
+    N_indices = int(len(samples_coord)*keep_fraction)
+    indices = np.random.choice(len(samples_coord), size=N_indices, replace=False).astype(int)
+    indices = np.array(indices, dtype=int)
+    
+    samples_coord = np.array(samples_coord).astype(float)[indices]
+    samples_values = np.array(samples_values).astype(float)[indices]
     
     # Compute pairwise distances using pdist
     pairwise_distances = pdist(samples_coord, metric=distance_function)
     
+    # Determine growing distance bins
+    dmin = np.min(pairwise_distances)
+    dmax = np.max(pairwise_distances)
+    bins = [dmin]
+    bin_1 = dmin
+    step = 1/5
+    while bins[-1] < dmax:
+        bin_1 *= (1+step)
+        bins.append(bin_1)
+    bins = sorted(bins)
+    n_bins = len(bins) - 1
+    
     # Compute semivariances for each pair of points
     semivariances = 0.5 * (samples_values[:, None] - samples_values)**2  # Efficient broadcasting to compute all pairs
     semivariances = semivariances[np.triu_indices_from(semivariances, k=1)]  # Upper triangle without diagonal
-    
-    # Determine distance bins
-    min_dist = np.min(pairwise_distances)
-    max_dist = np.max(pairwise_distances)
-    n_bins = min(n_bins, len(samples_values))
-    bins = np.linspace(min_dist, max_dist, n_bins + 1)
 
+    
     # Bin the distances and semivariances
     binned_distances = []
     binned_semivariances = []
@@ -734,25 +797,53 @@ def fit_global_variogram(samples_coord, samples_values, distance_function, n_bin
     binned_distances = np.array(binned_distances)
     binned_semivariances = np.array(binned_semivariances)
 
+    
     # Fit the variogram model to binned data
     if len(binned_distances) > 1: # check if there are enough bins to fit the model
         # Select variogram model and initial parameters
+        # p0 is the variogram fitted variables initial guess
+        # bounds is the bound of each parameter
         if mode == 'linear':
             variogram_model = linear_variogram
-            p0 = [1.0, 0.0]  # [slope, nugget]
+            p0 = [1.0,  # slope (a)
+                  0.0]  # nugget (b) 
+            bounds = ([0.0, 0.0], [np.inf, np.inf])
+            
         elif mode == 'spherical':
             variogram_model = spherical_variogram
-            p0 = [np.max(binned_semivariances), np.max(binned_distances)/2, np.min(binned_semivariances)] # [sill, range, nugget]
+            p0 = [np.max(binned_semivariances), # sill (steady-state semivariance)
+                  np.max(binned_distances)/2,   # range (distance that converges)
+                  np.min(binned_semivariances)  # nugget (y-axis crossing semivariance)
+                  ]  
+            bounds = ([0.0, 0.0, 0.0], [np.inf, np.inf, np.inf])
+            
         elif mode == 'exponential':
             variogram_model = exponential_variogram
-            p0 = [np.max(binned_semivariances), np.max(binned_distances)/2, np.min(binned_semivariances)] # [sill, range, nugget]
+            p0 = [np.max(binned_semivariances), # sill (steady-state semivariance)
+                  np.max(binned_distances)/2,   # range (distance that converges)
+                  np.min(binned_semivariances)] # nugget (y-axis crossing semivariance)
+            bounds = ([0.0, 0.0, 0.0], [np.inf, np.inf, np.inf])
+        
         elif mode == 'gaussian':
             variogram_model = gaussian_variogram
-            p0 = [np.max(binned_semivariances), np.max(binned_distances)/2, np.min(binned_semivariances)] # [sill, range, nugget]
+            p0 = [np.max(binned_semivariances), # sill (steady-state semivariance)
+                  np.max(binned_distances)/2,   # range (distance that converges)
+                  np.min(binned_semivariances)] # nugget (y-axis crossing semivariance)
+            bounds = ([0.0, 0.0, 0.0], [np.inf, np.inf, np.inf])
         else:
-            raise ValueError("Invalid variogram mode. Choose 'linear', 'spherical', 'exponential', or 'gaussian'.")
+            raise ValueError("Invalid variogram mode.")
 
-        popt, _ = curve_fit(variogram_model, binned_distances, binned_semivariances, p0=p0)  # Initial guesses for slope and nugget
+        residuals_func = lambda params:  variogram_model(binned_distances, *params) - binned_semivariances
+        
+        result = least_squares(
+            residuals_func,
+            x0=p0,
+            bounds=bounds,
+            loss="soft_l1"
+        )
+        
+        popt = result.x
+        
         plot_fitted_variogram(variogram_model, popt, pairwise_distances, semivariances, binned_distances, binned_semivariances, samples_coord, samples_values, distance_function, bins)
         
         return variogram_model, popt 
@@ -764,7 +855,6 @@ def fit_global_variogram(samples_coord, samples_values, distance_function, n_bin
 
 # Get samples from different quadrant
 def get_nearest_samples_indexes(domain_point, samples_coord, distance_function, N):
-    
     coordinates = np.array(samples_coord)
     diff = samples_coord - np.array(domain_point)
     signs = np.sign(diff)
@@ -814,8 +904,12 @@ def get_nearest_samples_indexes(domain_point, samples_coord, distance_function, 
     
     coord_list = quad_ppp_near_coord + quad_ppm_near_coord + quad_pmp_near_coord + quad_pmm_near_coord + quad_mpp_near_coord + quad_mpm_near_coord + quad_mmp_near_coord + quad_mmm_near_coord
 
-    near_indexes = np.where(np.isin(list(map(tuple, samples_coord)), list(map(tuple, coord_list))))[0]
+    samples_coord_np = np.array(samples_coord)
+    coord_list_np = np.array(coord_list)
+    coord_list_np = np.unique(coord_list_np, axis=0)
     
+    near_indexes = np.where(np.any(np.all(samples_coord_np[:, None] == coord_list_np[None, :], axis=2), axis=1))[0]
+ 
     return near_indexes
     
 
@@ -1023,12 +1117,18 @@ def GET_INTERPOLATED_DOMAIN(sampled_volume, interpolation_mode, fluid_default_va
         elif interpolation_mode == "expand_samples":
             interpolated_volume = SAMPLE_EXPANSION_INTERPOLATION(sampled_volume, samples_coord)
         elif interpolation_mode == "kriging":
-            interpolated_volume = KRIGING_INTERPOLATION(sampled_volume, samples_coord, distance_function, 5, solid_default_value)
+            interpolated_volume = KRIGING_INTERPOLATION(sampled_volume, 
+                                                        samples_coord, 
+                                                        distance_function, 
+                                                        N_neighbors=8, 
+                                                        num_workers=20, 
+                                                        model='spherical', 
+                                                        universal=True, 
+                                                        variogram_sampling=0.2)
         else:
             raise Exception("Not Implemented.")
         print("Interpolation finished")
-        
-        
+
         # Assign interpolated values to the right places
         final_volume = Change_Interpolated_Cells(final_volume, interpolated_volume)
 
