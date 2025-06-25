@@ -5,7 +5,7 @@ This project addresses the challenge of reconstructing spatial wettability distr
 
 ---
 
-## 📚 Abstract
+## Abstract
 
 Local wettability variations in porous media arise from mineral composition, fluid–solid history, and surface roughness. These variations—commonly referred to as *mixed-wetting*—strongly influence multiphase flow and relative permeability. While micro-CT imaging enables automated contact angle measurements, these are limited to regions with visible triple-phase contact lines. 
 
@@ -13,7 +13,7 @@ This work proposes a **computational heuristic** to extrapolate such pointwise m
 
 ---
 
-## 🧠 Project Goals
+## Project Goals
 
 - Generate synthetic 3D porous rock models with ground-truth contact angle distributions.
 - Apply different interpolation strategies to propagate sampled contact angle values.
@@ -22,7 +22,7 @@ This work proposes a **computational heuristic** to extrapolate such pointwise m
 
 ---
 
-## 📁 Directory Overview
+## Directory Overview
 
 ```
 .
@@ -38,7 +38,7 @@ This work proposes a **computational heuristic** to extrapolate such pointwise m
 
 ---
 
-## 🧪 Interpolation Methods
+## Interpolation Methods
 
 ### 🔹 1. Nearest Neighbor (NN)
 - Removes internal solid regions to focus on the interface.
@@ -65,7 +65,7 @@ This work proposes a **computational heuristic** to extrapolate such pointwise m
 
 ---
 
-## ▶️ How to Use
+## How to Use
 
 ### Step 1: Install Dependencies
 ```bash
@@ -94,7 +94,7 @@ python main_CreateRockVolumes_fromRAW.py
 
 ---
 
-## 🧾 Input & Output
+## Input & Output
 
 - **Input:**
   - `.raw` files: 3D binary arrays (solid=0, fluid=1).
@@ -106,7 +106,7 @@ python main_CreateRockVolumes_fromRAW.py
 
 ---
 
-## 📊 Visualization
+## Visualization
 
 - `Plot_Domain`: Shows scalar field with PyVista colormap.
 - `Plot_Classified_Domain`: Highlights discrete classes (e.g., solid/fluid/grain).
@@ -114,7 +114,7 @@ python main_CreateRockVolumes_fromRAW.py
 
 ---
 
-## 👨‍🔬 Authors & Credits
+## Authors & Credits
 
 Developed at **Universidade Federal de Santa Catarina**  
 By Gabriel César Silveira, Christoph I. Zevenbergen, Ricardo L. M. Bazarin, Diogo S. Nardelli  
