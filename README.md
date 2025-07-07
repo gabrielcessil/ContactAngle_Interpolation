@@ -72,25 +72,22 @@ This work proposes a **computational heuristic** to extrapolate such pointwise m
 pip install numpy scipy matplotlib pyvista scikit-image
 ```
 
-### Step 2: Run an Interpolation Experiment
+### Step 2: Generate Processed Rock Volumes
+```bash
+python main_CreateRockVolumes_fromRAW.py
+```
+
+### Step 3: Run an Interpolation Experiment
 ```bash
 python main.py
 ```
 
-### Step 3: Validate with Real Measurements
+### Step 4: Validate with Real Measurements
 ```bash
 python main_Validation.py
 ```
 
-### Step 4: Test Kriging Performance
-```bash
-python main_TestKriging.py
-```
 
-### Step 5: Generate Processed Rock Volumes
-```bash
-python main_CreateRockVolumes_fromRAW.py
-```
 
 ---
 
