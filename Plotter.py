@@ -7,8 +7,9 @@ import matplotlib
 import matplotlib as mpl
 from PIL import Image
 from skimage.measure import regionprops, label
-import utilities as util
+import math
 
+from utilities import LBPM_class_2_value
 
         
 def Plot_Domain(values, filename, remove_value=[], colormap='cool', lbpm_class=True, special_colors={}):
@@ -56,7 +57,7 @@ def Plot_Domain(values, filename, remove_value=[], colormap='cool', lbpm_class=T
     
     # After locating fluid and solid, the values can be converted back to LBPM class
     other_cells_mask = np.where((mesh["values"] != 0) & (mesh["values"] != 1))[0]
-    if lbpm_class: grid.cell_data["values"] = util.LBPM_class_2_value(grid.cell_data["values"])
+    if lbpm_class: grid.cell_data["values"] = LBPM_class_2_value(grid.cell_data["values"])
     other_cells = mesh.extract_cells(other_cells_mask) 
     
     # Configure the plotter
@@ -100,49 +101,61 @@ def Plot_Domain(values, filename, remove_value=[], colormap='cool', lbpm_class=T
         font_size=15, xtitle='x', ytitle='y', ztitle='z'
     )
 
-    plotter.screenshot(filename + ".png")
+    # Show the visualization
+    plotter.show(auto_close=False)
 
-def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colormap='cool', show_label=True, special_colors={}):
+    # Save the visualization as an image
+    plotter.screenshot(filename + ".png")
+    plotter.save_graphic( filename + ".svg", raster=True, painter=True)
+    plotter.close()
+
+    return filename + ".png"
+
+def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colormap='cool', 
+                           show_label=True, special_colors={}, 
+                           show_edges=False, lighting=True,
+                           smooth_shading=False, split_sharp_edges=False,
+                           ambient=None, diffuse=None, specular=None):
     # Ensure the output directory exists
     folder = os.path.dirname(filename)
     if folder and not os.path.exists(folder):
         os.makedirs(folder)
 
     # CREATE GRID STRUCTURE
-    grid = pv.ImageData()
+    grid            = pv.ImageData()
     grid.dimensions = np.array(values.shape) + 1  # Adjust for point-based representation
-    grid.origin = (0, 0, 0)  # Set grid origin
-    grid.spacing = (1, 1, 1)  # Uniform voxel spacing
+    grid.origin     = (0, 0, 0)  # Set grid origin
+    grid.spacing    = (1, 1, 1)  # Uniform voxel spacing
 
-
-
-    # MAP ORIGINAL VALUES
-    unique_classes = np.unique(values) 
-    discrete_linspace_values = np.round(np.linspace(0, 1, len(unique_classes)+1), 4)
-    #step = (discrete_linspace_values[1]-discrete_linspace_values[0]
-    normalized_mapping = {key: val + 0.0001 for key, val in zip(unique_classes, discrete_linspace_values)}
-
-    denormalization_mapping = {v: k for k, v in normalized_mapping.items()}
     
+    # Create mapping (normalization, treating values in any range as classes)
+    unique_classes                  = np.unique(values)     # Ex: 3
+    unique_classes_afterRemoving    = unique_classes[~np.isin(unique_classes, remove_value)]
+    expoente        = math.floor(  math.log10((1/ (len(unique_classes_afterRemoving)-1)))   ) # Ex: -1
+    delta           = 10 ** expoente        # Ex: 10^-1 = 0.1 (added for safety)
+    n_decimals      = np.abs(expoente)+1    # Rounding decimals (for safety, one above the needed / one extra decimal )
+    discrete_linspace_values    = np.linspace(start=0, stop=1, num=len(unique_classes_afterRemoving)) # Create a linear mapping with N value between 0 and 1
+    normalized_mapping          = {class_i:     round(norm_val, n_decimals)  for class_i, norm_val in zip(unique_classes_afterRemoving, discrete_linspace_values)}
+    denormalization_mapping     = {v:           round(k,        n_decimals)    for k, v in normalized_mapping.items()}
     
     # ASSING VALUES TO MESH STRUCTURE
-    mesh_normalized_values = np.round(np.vectorize(normalized_mapping.get)(values), 4)
-    grid.cell_data["class_values"] = mesh_normalized_values.flatten(order="F")
-    mesh = grid.cast_to_unstructured_grid()
-
+    mesh_normalized_values          = np.vectorize(lambda x: normalized_mapping.get(x, np.nan))(values) # Normalize all the provided array    
+    grid.cell_data["class_values"]  = mesh_normalized_values.flatten(order="F")    # Assign to grid
+    mesh                            = grid.cast_to_unstructured_grid()             # Assign to mesh
 
     # REMOVE UNWATED CELLS
+    nan_mask = np.isnan(mesh["class_values"])
+    nan_cell_indices = np.where(nan_mask)[0]  # Flattened array of indices
+    mesh.remove_cells(nan_cell_indices, inplace=True)
     for removed_value in remove_value:
         if removed_value in normalized_mapping:
             normalized_value_to_remove = normalized_mapping[removed_value]
             to_remove_mask = np.argwhere(mesh["class_values"] == normalized_value_to_remove)
             mesh.remove_cells(to_remove_mask.flatten(), inplace=True)
             
-        
-    # Unique values in mesh
-    mesh_unique_values = np.unique(mesh["class_values"])
-    num_mesh_unique_values = len(mesh_unique_values)
-    
+    # Unique values in mesh: after removing unwanted
+    mesh_unique_values      = np.unique(mesh["class_values"])
+    num_mesh_unique_values  = len(mesh_unique_values)
     
     # MANAGE COLORS
     # Get colormap for custom labels
@@ -183,47 +196,53 @@ def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colorma
         tick_positions = [discrete_linspace_values[0]]
     # Create annotation mapping with proper spacing
     annotations = {}
+    
     for tick, val in zip(tick_positions, mesh_unique_values):
         original_val = denormalization_mapping[val]
-                
         if int(denormalization_mapping[val]) in labels or float(denormalization_mapping[val]) in labels:
-            annotations[tick] = f"            {labels[original_val]}" 
+            annotations[tick] = f"                                     {labels[original_val]}" 
         else:
-            annotations[tick] = f"            {original_val}"
-
+            annotations[tick] = f"                                     {original_val}"
+    
     
     # MAKE THE PLOT
-    plotter = pv.Plotter(window_size=[1920, 1080])  # Full HD resolution
+    plotter = pv.Plotter(window_size=[1920*3, 1080*3])  # Full HD resolution
+    plotter.set_background(color=None)
     if mesh.n_cells > 0:
         plotter.add_mesh(
             mesh,
-            scalars=mesh["class_values"],
-            categories=True,
-            cmap= color_list,
-            show_edges=False,
-            lighting=True,
-            smooth_shading=False,
-            split_sharp_edges=False,
-            annotations = annotations,
-            scalar_bar_args={
-                "title": "    Classes",
-                "vertical": True,
-                "title_font_size": 40,
-                "label_font_size": 25,
-                "position_x": 0.8,
-                "position_y": 0.05,
-                "height": 0.9,
-                "width": 0.05,
-                "n_labels": 0,
-            },
-            clim=[0, 1] # Influences the color setting
+            scalars     =mesh["class_values"],
+            show_scalar_bar=False,
+            categories  =True,
+            cmap        =color_list,
+            show_edges  =show_edges,
+            lighting    =lighting,
+            smooth_shading      =smooth_shading,
+            split_sharp_edges   =split_sharp_edges,
+            ambient=ambient, 
+            diffuse=diffuse, 
+            specular=specular,
+            #annotations         =annotations,
+            #scalar_bar_args={
+            #    "title": "    Classes",
+            #    "vertical":         True,
+            #    "title_font_size":  40,
+            #    "label_font_size":  25,
+            #    "position_x":       0.8,
+            #    "position_y":       0.05,
+            #    "height":           0.9,
+            #    "width":            0.05,
+            #    "n_labels":         0,
+            #},"""
+            clim=[0,1]  
         )
         
-    # Add axis indicators
+    """
+    # Add axis in, dicators
     plotter.add_axes(
-        line_width=5,
-        cone_radius=0.6,
-        shaft_length=0.9,
+        line_width=5,      
+        cone_radius=0.6,     
+        shaft_length=0.9, 
         tip_length=0.2,
         ambient=0.5,
         label_size=(0.25, 0.15)
@@ -245,16 +264,105 @@ def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colorma
         ytitle='y',
         ztitle='z'
     )
+    """
 
     # Show the visualization
-    plotter.show()
+    plotter.show(auto_close=False)
 
     # Save the visualization as an image
-    plotter.screenshot(filename + ".png")
+    plotter.screenshot(filename + ".png",  transparent_background=True)
+    plotter.save_graphic( filename + ".svg", raster=False, painter=False)
+    plotter.close()
     
     return filename + ".png"
 
 
+from matplotlib.patches import Patch
+
+def Plot_Classified_Domain_2D(values, filename, remove_value=[], labels={}, colormap='cool', show_label=True, special_colors={}):
+    # Ensure the output directory exists
+    folder = os.path.dirname(filename)
+    if folder and not os.path.exists(folder):
+        os.makedirs(folder)
+
+    # If input is 3D (1, H, W), take first slice
+    if len(values.shape) == 3 and values.shape[0] == 1:
+        values = values[0]
+
+    # Get unique classes (ignoring remove_value)
+    unique_classes = np.unique(values)
+    unique_classes = unique_classes[~np.isin(unique_classes, remove_value)]
+
+    expoente = math.floor(math.log10((1/(len(unique_classes)-1)))) if len(unique_classes) > 1 else 0
+    delta = 10 ** expoente if len(unique_classes) > 1 else 1
+    n_decimals = np.abs(expoente)+1 if len(unique_classes) > 1 else 1
+    discrete_linspace_values = np.linspace(start=0, stop=1, num=len(unique_classes))
+    normalized_mapping = {class_i: round(norm_val, n_decimals) for class_i, norm_val in zip(unique_classes, discrete_linspace_values)}
+    denormalization_mapping = {v: round(k, n_decimals) for k, v in normalized_mapping.items()}
+
+    # Normalize values
+    normalized_values = np.vectorize(lambda x: normalized_mapping.get(x, np.nan))(values)
+
+    # Handle special colors
+    default_class_colors = {}
+    for special_value, special_color in special_colors.items():
+        if special_value in normalized_mapping:
+            default_class_colors[normalized_mapping[special_value]] = special_color
+
+    # Generate colors for remaining classes
+    nonDefault_classes = [val for val in normalized_mapping.values() if val not in default_class_colors]
+    num_nonDefault_classes = len(nonDefault_classes)
+    if num_nonDefault_classes > 0:
+        cmap = mpl.colormaps[colormap].resampled(num_nonDefault_classes)
+        color_space = np.linspace(1, 0, num_nonDefault_classes+1)[0:-1]
+        if num_nonDefault_classes > 1:
+            color_space = color_space + (color_space[1]-color_space[0])/2
+        generated_colors = cmap(color_space)
+
+    # Build final color list
+    color_list = []
+    legend_elements = []
+    color_index = 0
+    for val in sorted(normalized_mapping.values()):
+        if val in default_class_colors:
+            color = default_class_colors[val]
+        else:
+            color = generated_colors[color_index]
+            color_index += 1
+        color_list.append(color)
+
+        if show_label:
+            original_val = denormalization_mapping[val]
+            label_text = labels.get(original_val, str(original_val))
+            legend_elements.append(Patch(facecolor=color, edgecolor='black', label=label_text))
+
+    # Create custom colormap
+    cmap = mcolors.ListedColormap(color_list)
+    bounds = np.linspace(0, 1, len(color_list)+1)
+    norm = mcolors.BoundaryNorm(bounds, cmap.N)
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(10, 8))
+    ax.imshow(normalized_values, cmap=cmap, norm=norm, interpolation='none')
+
+    # Add legend instead of colorbar
+    if show_label:
+        ax.legend(handles=legend_elements, loc='upper left', fontsize='xx-large', frameon=True)
+
+
+    ax.set_xticks([])           # Hide x-axis ticks
+    ax.set_yticks([])           # Hide y-axis ticks
+    ax.set_title("")            # Remove title
+    ax.set_xlabel("")           # Remove x-axis label
+    ax.set_ylabel("")           # Remove y-axis label
+    
+    fig.tight_layout()
+    
+
+
+    plt.savefig(filename + ".png", bbox_inches='tight', dpi=300)
+    plt.close()
+    return filename + ".png"
 
 
 def plot_hist(data, bins=30, title='Histogram', filename=None, notable=[], xlim=(), ylim=(), color='blue'):
@@ -460,7 +568,6 @@ def create_gif_from_filenames(image_filenames, gif_filename, duration=200, loop=
     if not images:
         print("Error: Could not open any images from the provided filenames.")
         return
-    print(image_filenames)
     images[0].save(gif_filename+".gif", save_all=True, append_images=images[1:], loop=loop, duration=duration)
 
     if erase_plots:
@@ -517,158 +624,146 @@ def plot_labeled_clusters(cluster_image, labels, output_file="labeled_clusters")
     plt.savefig(output_file+".png", dpi=300, bbox_inches="tight")
     plt.show()
     
-    
+import matplotlib.ticker as ticker
 def plot_mean_deviation(x, y_means, y_devs, title="Algorithm Performance",
                         xlabel="Samples Cells / Rock Surface Cells", ylabel="Accuracy",
-                        filename="performance_plot.png"):
+                        filename="performance_plot",
+                        dashed =None): # Removed .png extension as it will be added dynamically
     """
     Plots the mean accuracy and its deviation as shaded area.
 
     Parameters:
+    - x: List or numpy array of x-axis values.
     - y_means: List or numpy array of mean accuracy values (y-axis).
     - y_devs: List or numpy array of standard deviation values.
     - title: Title of the plot.
     - xlabel: Label for the x-axis.
     - ylabel: Label for the y-axis.
-    - filename: Filename to save the plot.
-    """    
+    - filename: Base filename to save the plot (without extension).
+    """
     if isinstance(y_means, list):
         y_means = np.array(y_means)
     if isinstance(y_devs, list):
         y_devs = np.array(y_devs)
-
-
+    if isinstance(x, list):
+        x = np.array(x)
+        
+    
     # Use a modern style
     plt.style.use("seaborn-v0_8-darkgrid")
+    plt.rcParams["font.family"] =  "DejaVu Serif"
 
     # Create figure with the specified window size (1920x1080 pixels)
     fig, ax = plt.subplots(figsize=(19.2, 10.8), dpi=100)  # 1920x1080 = 19.2 x 10.8 inches at 100 dpi
-
+    
+    if dashed is not None:
+        ax.plot(dashed[0], dashed[1], '--', color='black', linewidth=2.4, alpha=0.6, label="Regressed")
+        
     # Plot mean curve
-    ax.plot(x, y_means, color='#1f77b4', linewidth=2.5, label="Mean Accuracy")
+    ax.plot(x, y_means, 'o-', color='#1f77b4', linewidth=3, label="Mean")
 
     # Fill shaded deviation
     ax.fill_between(x, y_means - y_devs, y_means + y_devs, color='#1f77b4', alpha=0.2, label="Deviation")
-
+    
+    
     # Labels and title
-    ax.set_xlabel(xlabel, fontsize=14)
-    ax.set_ylabel(ylabel, fontsize=14)
-    ax.set_title(title, fontsize=16, fontweight='bold')
+    ax.set_xlabel(xlabel, fontsize=34) # Increased label font size
+    ax.set_ylabel(ylabel, fontsize=34) # Increased label font size
+    ax.set_title(title, fontsize=34, fontweight='bold') # Increased title font size
 
     # Customizing ticks
-    ax.tick_params(axis='both', which='major', labelsize=12)
+    ax.tick_params(axis='both', which='major', labelsize=28) # Increased tick label font size
+
+    # Add more ticks for x-axis if x has enough distinct values
+    # This will create ticks at each x-value provided, making it more detailed
+    if len(x) > 1: ax.set_xticks(x)
 
     # Add a legend
-    ax.legend(fontsize=12, loc="lower right", frameon=True, shadow=True)
+    ax.legend(fontsize=32, loc="lower right", frameon=True, shadow=True) # Increased legend font size
 
     # Show grid for clarity
-    ax.grid(True, linestyle="--", alpha=0.6)
+    # Changed grid color to a dark gray for better visibility
+    ax.minorticks_on()
 
-    # Save the figure in high resolution
-    plt.savefig(filename+".png", dpi=300, bbox_inches="tight")  # High-quality PNG
+    # Apply grid to both major and minor ticks
+    ax.grid(which='both', linestyle='--', alpha=0.5, color='black')  # adjust to taste
 
-    # Show plot
+    # Save the figure in high resolution as SVG
+    output_dir = os.path.dirname(filename)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        
+    ax.set_xscale('log')
+    ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%.3f'))  # integers
+    
+    
+
+    plt.savefig(filename + ".svg", dpi=300, bbox_inches="tight") # Changed extension to .svg
     plt.show()
+    plt.close(fig) # Close the figure to free up memory
     
-"""
-def Plot_Domain(values, filename, remove_value=[], colormap='cool', clim=[0, 255]):
-
-    # Ensure the folder for the output file exists
-    folder = os.path.dirname(filename)
-    if folder and not os.path.exists(folder):
-        os.makedirs(folder)
-
-    # Create structured grid (ImageData)
-    grid = pv.ImageData()
-    grid.dimensions = np.array(values.shape) + 1  # Dimensions as points
-    grid.origin = (0, 0, 0)  # Origin of the grid
-    grid.spacing = (1, 1, 1)  # Uniform spacing
-
-    # Assign cell values
-    grid.cell_data["values"] = values.flatten(order="F")  # Attribute name: "values"
-
-    # Remove unwanted cells from the plot
-    mesh = grid.cast_to_unstructured_grid()
-    if remove_value:
-        for removed_value in remove_value:
-            ghosts = np.argwhere(mesh["values"] == removed_value)
-            mesh.remove_cells(ghosts.flatten(), inplace=True)
-
-    # Separate the cells with value 0 for grey coloring
-    solid_cells = mesh.extract_cells(np.where(mesh["values"] == 0)[0]) # 
     
-    other_cells = mesh.extract_cells(np.where(mesh["values"] != 0)[0]) 
+def plot_multiple_mean_deviation(curve_dict,
+                                  title="Algorithm Performance",
+                                  xlabel="Samples Cells / Rock Surface Cells",
+                                  ylabel="Accuracy",
+                                  filename="performance_plot"):
+    """
+    Plots multiple mean curves with shaded deviation areas.
 
-    # Configure the plotter
-    plotter = pv.Plotter(window_size=[1920, 1080])  # Full HD resolution
+    Parameters:
+    - curve_dict: Dict where each key is a label (e.g., "Curve 1") and each value is a tuple (x, y_mean, y_dev)
+    - title: Title of the plot
+    - xlabel: Label for the x-axis
+    - ylabel: Label for the y-axis
+    - filename: Base filename to save the plot (without extension)
+    """
 
-    if other_cells.n_cells > 0:
-        # Add cells with non-zero values to the plot
-        plotter.add_mesh(
-            other_cells,
-            cmap="colormap",
-            show_edges=False,
-            lighting=True,
-            smooth_shading=False,
-            split_sharp_edges=False,
-            scalar_bar_args={
-                "title": "Continuous Range",  # Title of the color bar
-                "vertical": True,  # Make the color bar vertical
-                "title_font_size": 40,
-                "label_font_size": 25,
-                "position_x": 0.8,  # Position of the color bar (X-axis)
-                "position_y": 0.05,  # Position of the color bar (Y-axis)
-                "height": 0.9,  # Height of the color bar
-                "width": 0.05,  # Width of the color bar
-                "n_labels": 10,
-            },
-            clim=clim
-        )
+    # Use a modern style and font
+    plt.style.use("seaborn-v0_8-darkgrid")
+    plt.rcParams["font.family"] = "DejaVu Serif"
+
+    # Create figure with the specified window size (1920x1080 pixels)
+    fig, ax = plt.subplots(figsize=(19.2, 10.8), dpi=100)
+
+    # Plot each curve with shaded deviation
+    for label, (x, y_mean, y_dev) in curve_dict.items():
+        x = np.array(x)
+        y_mean = np.array(y_mean)
+        y_dev = np.array(y_dev)
+
+        ax.plot(x, y_mean, linewidth=3, marker='o', label=label+": mean")
+        ax.fill_between(x, y_mean - y_dev, y_mean + y_dev, alpha=0.2, label=label+": std")
+
+    # Labels and title
+    ax.set_xlabel(xlabel, fontsize=34)
+    ax.set_ylabel(ylabel, fontsize=34)
+    ax.set_title(title, fontsize=34, fontweight='bold')
+
+    # Customizing ticks
+    ax.tick_params(axis='both', which='major', labelsize=28)
+    ax.minorticks_on()
+    ax.grid(which='both', linestyle='--', alpha=0.5, color='black')
+
+    # Set log scale and formatter
+    ax.set_xscale('log')
+    ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%.3f'))
+
+    # Set consistent x-ticks using first curve's x-values (assumes shared domain)
+    #shared_x = list(curve_dict.values())[0][0]
+    #if len(shared_x) > 1:
+    #    ax.set_xticks(shared_x)
+
+    # Add a legend
+    ax.legend(fontsize=32, loc="lower right", frameon=True, shadow=True)
+
+    # Save figure
+    output_dir = os.path.dirname(filename)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    plt.savefig(filename + ".svg", dpi=300, bbox_inches="tight")
+    plt.show()
+    plt.close(fig)
     
 
-    if solid_cells.n_cells > 0:  # Check if the mesh is not empty
-        # Add cells with value 0 as grey
-        plotter.add_mesh(solid_cells, color="cornflowerblue", show_scalar_bar=False)
-
-    # Add edge highlighting
-    edges = mesh.extract_feature_edges(
-        boundary_edges=False,
-        non_manifold_edges=False,
-        feature_angle=30,
-        manifold_edges=False,
-    )
-    if edges.n_cells >0:
-        plotter.add_mesh(edges, color='k', line_width=5, show_scalar_bar=False)
-
-    # Add axis indicators
-    plotter.add_axes(
-        line_width=5,
-        cone_radius=0.6,
-        shaft_length=0.9,
-        tip_length=0.2,
-        ambient=0.5,
-        label_size=(0.25, 0.15)
-    )
-
-    # Show grid bounds with labels
-    plotter.show_bounds(
-        grid='back',
-        location='outer',
-        ticks='both',
-        show_xlabels=True,
-        show_ylabels=True,
-        show_zlabels=True,
-        n_xlabels=4,
-        n_ylabels=4,
-        n_zlabels=4,
-        font_size=15,
-        xtitle='x',
-        ytitle='y',
-        ztitle='z'
-    )
-    
-    plotter.show()
-
-    # Save the visualization as an image
-    plotter.screenshot(filename + ".png")  # Save as screenshot
-"""

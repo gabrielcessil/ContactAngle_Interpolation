@@ -1,0 +1,188 @@
+import Plotter as pl
+import numpy as np
+import utilities as util
+import matplotlib.pyplot as plt
+import sys
+import os
+
+#######################################################
+#************ LOAD MORPH DRAIN ARRAY  :    ***********#
+#######################################################
+
+# Morph drain array
+#input_file_name     = "/home/gabriel/Desktop/Molhabilidade/ContactAngle_Interpolation-main --- INTERPORE TEST CODE/Slide Images/Exemplo Medicoes/benthheimer_200x200x200__0_volume_final_morphodrain.raw"
+input_file_names = [
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/Simulacao_Test/id_t1000000.raw"
+    ]
+volume_shape        = (200,200,200)
+
+
+
+#######################################################
+#************ RUN MEASURING ALGORITHM:     ***********#
+#######################################################
+
+"""
+for input_file_name in input_file_names:
+    morph_drain         = np.fromfile(input_file_name, dtype=np.uint8).reshape(volume_shape)
+    morph_drain[(morph_drain != 1) & (morph_drain != 2)]          = 0
+    
+    # Load measuring method
+    file_dir = '/home/gabriel/Desktop/Molhabilidade/Metodo Medida Cris/' # Folder of where the library file is located. 
+    sys.path.append(file_dir)
+    import Lib_ContactAngle as esf
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    
+    # Measurement parameters
+    R1                      = 5     # Plane regression subvolume radius
+    alpha                   = 0.5   # Sphere regression subvbolume radius scaling factors
+    Max_residual_plane      = 0.4
+    Max_residual_sphere     = 0.5
+    Min_points_plane        = 0.5
+    Min_points_sphere       = 20 
+    # Measure contact angles
+    Measurements            = esf.MeasureAngle(morph_drain)
+    Filtered_Measurements   = esf.FilterMeasurements(Measurements, R1 = R1, mpe = Min_points_sphere, mpp = Min_points_plane, maxerr_e = Max_residual_sphere, maxerr_p = Max_residual_plane)
+    # Save results:
+    np.save(os.path.splitext(input_file_name)[0]+"_AngleMeasures.npy", Measurements[0:4, :])
+    np.save(os.path.splitext(input_file_name)[0]+"_AngleMeasures_filtered.npy", Filtered_Measurements[0:4, :])
+"""
+
+
+########################################################
+#************ VISUALIZE MEASURES           ***********#
+#######################################################
+#"""
+for input_file_name in input_file_names:
+    base_path, _ = os.path.splitext(input_file_name)
+    
+    morph_drain         = np.fromfile(input_file_name, dtype=np.uint8).reshape(volume_shape)
+    morph_drain[(morph_drain != 1) & (morph_drain != 2)]          = 0
+    Measurements = np.load(os.path.splitext(input_file_name)[0]+"_AngleMeasures.npy")
+    
+    angles  = Measurements[0,:]
+    coord_x = Measurements[1,:].astype(int)
+    coord_y = Measurements[2,:].astype(int)
+    coord_z = Measurements[3,:].astype(int)
+    
+    
+    
+    volume              = morph_drain.copy()
+    solid_mask          = (morph_drain != 1) & (morph_drain != 2)
+    volume[solid_mask]  = 0
+    volume[~solid_mask] = 1
+    
+    
+    volume_wAngles                            = volume.copy()
+    volume_wAngles[coord_x, coord_y, coord_z] = angles
+    
+    pl.Plot_Classified_Domain(volume, base_path+"_volume", 
+                              special_colors= {
+                                  0: (0.5, 0.5, 0.5, 1),  # Assign grey for solid cells
+                                  1: (0.0, 0.0, 0.0, 1)  # Assign black for void cells (removed from plot)
+                              },
+                              show_label=False,
+                              show_edges=False, lighting=True,
+                              smooth_shading=True, split_sharp_edges=False,
+                              ambient=0.3, diffuse=None, specular=None
+                              )
+    
+    pl.Plot_Classified_Domain(morph_drain, base_path+"_morph_drain", 
+                              remove_value=[2],
+                              special_colors= {
+                                  0: (0.5, 0.5, 0.5, 1),  # Assign grey for solid cells
+                                  1: (0.8, 0.36, 0.36, 1),  # Assign red for fluid I
+                                  2: (0.39, 0.58, 0.93, 1),  # Assign blue for fluid II
+                              },
+                              show_label=False,
+                              show_edges=False, lighting=True,
+                              smooth_shading=True, split_sharp_edges=True,
+                              ambient=0.3, diffuse=None, specular=None
+                              )
+    
+    sub_volume = volume_wAngles[100:200,150:200,0:100]
+    pl.Plot_Classified_Domain(sub_volume, base_path+"sub_volume_wAngles", 
+                              remove_value=[1],
+                              special_colors= {
+                                  0: (0.5, 0.5, 0.5, 0.3), # Assign grey for solid cells
+                                  1: (0.0, 0.0, 0.0, 1)  # Assign black for void cells (removed from plot)
+                              },
+                              show_label=False,
+                              split_sharp_edges=True
+                              )
+    
+    pl.Plot_Classified_Domain(volume_wAngles, base_path+"volume_wAngles", 
+                              remove_value=[1],
+                              special_colors= {
+                                  0: (0.5, 0.5, 0.5, 0.1), # Assign grey for solid cells
+                                  1: (0.0, 0.0, 0.0, 1)  # Assign black for void cells (removed from plot)
+                              },
+                              show_label=False,
+                              split_sharp_edges=True
+                              )
+    
+    hollow_volume               = morph_drain.copy()
+    solid_mask                  = (morph_drain != 1) & (morph_drain != 2)
+    hollow_volume[solid_mask]   = 0
+    hollow_volume[~solid_mask]  = 1
+    hollow_volume               = util.Remove_Internal_Solid(hollow_volume)
+    print("Surface cells:", np.count_nonzero(hollow_volume==0))
+    print("Measured cells: ", Measurements.shape[1])
+    print(Measurements.shape[1])
+    print("(Measured /Surface cells) %: ", 100*Measurements.shape[1]/np.count_nonzero(hollow_volume==0))
+    
+#"""
+
+# ANALYZING FILTERED MEASURMENTS
+"""
+Measurements = np.load(os.path.splitext(input_file_name)[0]+"_AngleMeasures_filtered.npy")
+angles  = Measurements[0,:]
+coord_x = Measurements[1,:].astype(int)
+coord_y = Measurements[2,:].astype(int)
+coord_z = Measurements[3,:].astype(int)
+
+
+
+volume              = morph_drain.copy()
+solid_mask          = (morph_drain != 1) & (morph_drain != 2)
+volume[solid_mask]  = 0
+volume[~solid_mask] = 1
+
+
+volume_wAngles                            = volume.copy()
+volume_wAngles[coord_x, coord_y, coord_z] = angles
+
+sub_volume = volume_wAngles[100:200,150:200,0:100]
+pl.Plot_Classified_Domain(sub_volume, "/home/gabriel/Desktop/Molhabilidade/ContactAngle_Interpolation-main --- INTERPORE TEST CODE/Slide Images/Exemplo Medicoes/sub_volume_wAngles_filtered", 
+                          remove_value=[1],
+                          special_colors= {
+                              0: (0.5, 0.5, 0.5, 0.3), # Assign grey for solid cells
+                              1: (0.0, 0.0, 0.0, 1)  # Assign black for void cells (removed from plot)
+                          },
+                          show_label=False,
+                          split_sharp_edges=True
+                          )
+
+pl.Plot_Classified_Domain(volume_wAngles, "/home/gabriel/Desktop/Molhabilidade/ContactAngle_Interpolation-main --- INTERPORE TEST CODE/Slide Images/Exemplo Medicoes/volume_wAngles_filtered", 
+                          remove_value=[1],
+                          special_colors= {
+                              0: (0.5, 0.5, 0.5, 0.1), # Assign grey for solid cells
+                              1: (0.0, 0.0, 0.0, 1)  # Assign black for void cells (removed from plot)
+                          },
+                          show_label=False,
+                          split_sharp_edges=True
+                          )
+
+
+
+
+hollow_volume               = morph_drain.copy()
+solid_mask                  = (morph_drain != 1) & (morph_drain != 2)
+hollow_volume[solid_mask]   = 0
+hollow_volume[~solid_mask]  = 1
+hollow_volume               = util.Remove_Internal_Solid(hollow_volume)
+print("Surface cells:", np.count_nonzero(hollow_volume==0))
+print("Measured cells: ", Measurements.shape[1])
+print(Measurements.shape[1])
+print("(Measured /Surface cells) %: ", 100*Measurements.shape[1]/np.count_nonzero(hollow_volume==0))
+"""

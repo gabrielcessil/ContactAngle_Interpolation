@@ -6,35 +6,40 @@ from scipy.spatial.distance import pdist
 from scipy.spatial.distance import cdist
 from scipy.optimize import least_squares
 import traceback
+import multiprocessing
+from functools import partial
+import Plotter as pl
 
-def is_LBPM_class(value): return value > 73 #value < 0
+
+# Check if the value is on LBPM unique classe's range
+def is_LBPM_class(value): return value > 73 
     
-# From LBPM-class to angle
+# Turn LBPM unique classes into original values
 def LBPM_class_2_value(array_or_scalar, keep_values=(1,0)):  # Keep_values as tuple for consistency
     if isinstance(array_or_scalar, (int, float, np.integer, np.floating)):  # Check for scalar types
         if array_or_scalar not in keep_values:
-            return int(np.ceil(array_or_scalar)) - 74 #- int(np.ceil(array_or_scalar))  # Apply to scalar
+            return int(np.ceil(array_or_scalar)) - 74
         else:
             return array_or_scalar # Return scalar
     elif isinstance(array_or_scalar, np.ndarray):  # Check for NumPy array
         result = array_or_scalar.copy()
         mask = ~np.isin(array_or_scalar, keep_values)
-        result[mask] = np.ceil(array_or_scalar[mask]).astype(int) - 74 #- np.ceil(array_or_scalar[mask]).astype(int)
+        result[mask] = np.ceil(array_or_scalar[mask]).astype(int) - 74 
         return result
     else:
         raise TypeError("Input must be a scalar (int, float) or a NumPy array.")
 
-
+# Turn values into the LBPM unique classes 
 def value_2_LBPM_class(array_or_scalar, keep_values=(1,0)):
     if isinstance(array_or_scalar, (int, float, np.integer, np.floating)):
         if array_or_scalar not in keep_values:
-            return int(np.ceil(array_or_scalar)) +74 #-int(np.ceil(array_or_scalar))
+            return int(np.ceil(array_or_scalar)) + 74 
         else:
             return array_or_scalar
     elif isinstance(array_or_scalar, np.ndarray):
         result = array_or_scalar.copy()
         mask = ~np.isin(array_or_scalar, keep_values)
-        result[mask] = np.ceil(array_or_scalar[mask]).astype(int) + 74 #- np.ceil(array_or_scalar[mask]).astype(int)
+        result[mask] = np.ceil(array_or_scalar[mask]).astype(int) + 74 
         return result
     else:
         raise TypeError("Input must be a scalar (int, float) or a NumPy array.")
@@ -86,56 +91,6 @@ def compute_local_maxima(volume, distance_map, max_filtered):
 
     return local_max
 
-"""
-# FRAMEWORK WAY
-from skimage.feature import peak_local_max
-def compute_local_maxima(volume, distance_map, max_filtered, min_distance=3):
-
-    # Check dimensions
-    if volume.ndim not in [2, 3]:
-        raise ValueError("Input volume must have 2 or 3 dimensions.")
-    # Find local peaks with a minimum separation distance
-    local_max_coords = peak_local_max(
-        distance_map,
-        min_distance=min_distance,  # Ensures well-separated centers
-        indices=True,               # Returns coordinates
-        exclude_border=False        # Includes borders if needed
-    )
-    # Create a boolean mask with peaks set to True
-    local_max = np.zeros_like(distance_map, dtype=bool)
-    local_max[tuple(local_max_coords.T)] = True
-
-    return local_max
-"""
-"""
-# MY BASIC WAY
-def compute_local_maxima(volume, distance_map, max_filtered):
-
-    
-    # Check dimensions
-    if volume.ndim not in [2, 3]:
-        raise Exception("Make sure np.array has 2 or 3 dimensions.")
-
-    # Compute gradient only where dimension > 1
-    gradient_x = np.gradient(distance_map, axis=0) if distance_map.shape[0] > 1 else np.zeros_like(distance_map)
-    gradient_y = np.gradient(distance_map, axis=1) if distance_map.shape[1] > 1 else np.zeros_like(distance_map)
-    
-    if volume.ndim == 3:
-        gradient_z = np.gradient(distance_map, axis=2) if distance_map.shape[2] > 1 else np.zeros_like(distance_map)
-        local_max = (
-            ((gradient_x == 0) & (gradient_y == 0)) |
-            ((gradient_y == 0) & (gradient_z == 0)) |
-            ((gradient_x == 0) & (gradient_z == 0))
-        ) & (distance_map == max_filtered) & (distance_map > 0)
-
-    elif volume.ndim == 2:
-        local_max = (
-            (gradient_x == 0) & (gradient_y == 0)
-        ) & (distance_map == max_filtered) & (distance_map > 0)
-
-    return local_max
-"""
-
 def Watershed(volume):
     # Step 2: Compute the distance transform
     distance_map = ndi.distance_transform_edt(volume)
@@ -160,35 +115,13 @@ def Set_Solid_to_Solid_Label(hollow_volume, connected_labels, valid_labels, soli
     
     return array
 
-"""
-# Ensure that the labels are set to the surface solid cells
-def Set_Solid_to_Void_Label(hollow_volume, connected_labels,valid_labels, solid_cell=0, fluid_default=1):
-    
-    result = hollow_volume.copy() # Avoid comparing already set labels as fluid or samples 
-    
-    for i in range(hollow_volume.shape[0]):  
-        for j in range(hollow_volume.shape[1]):  
-            for k in range(hollow_volume.shape[2]): 
-                
-                element = hollow_volume[i, j, k]
-                
-                # If its a non-fluid cell: analyse to assign to label
-                if element != fluid_default:
-                    
-                    neighbors = Get_Neighbors(connected_labels, i, j, k)
-      
-                    for item in neighbors:      
-                        if item in valid_labels:
-                            # If any neighbor is a non-solid (label): copy the value
-                            result[i, j, k] = item
-    return result
-"""
+
 def Set_Solid_to_Void_Label(hollow_volume, connected_labels, valid_labels, connectivity=1, solid_cell=0, fluid_default=1):
     """
     Efficiently assigns labels to solid cells based on neighboring valid labels.
     """
     result = hollow_volume.copy()  # Avoid modifying original array
-
+    result = result.astype(int)
     # Create a mask for non-fluid cells (cells that need processing)
     mask = (hollow_volume != fluid_default)
 
@@ -209,68 +142,7 @@ def Set_Solid_to_Void_Label(hollow_volume, connected_labels, valid_labels, conne
 
     return result
     
-"""
-def Get_Neighbors(array, i, j, k, with_coords=False, flag_out_bounds=False):
-    dim = array.shape
-    i_max, j_max, k_max = dim[0] - 1, dim[1] - 1, dim[2] - 1
-    neighbors = []
 
-    for di in range(-1, 2):
-        for dj in range(-1, 2):
-            for dk in range(-1, 2):
-                
-                if di == 0 and dj == 0 and dk == 0:
-                    continue  # Skip the current cell
-
-                ni, nj, nk = i + di, j + dj, k + dk
-
-                if 0 <= ni <= i_max and 0 <= nj <= j_max and 0 <= nk <= k_max:
-                    if with_coords:
-                        neighbors.append((ni, nj, nk, array[ni][nj][nk]))
-                    else:
-                        neighbors.append(array[ni][nj][nk])
-                        
-                elif flag_out_bounds:
-                    if with_coords:
-                        neighbors.append((ni, nj, nk, None))
-                    else:
-                        neighbors.append(None)
-                
-    return neighbors
-"""
-
-"""
-def Get_Neighbors(array, i, j, k, with_coords=False, flag_out_bounds=False):
-    dim = array.shape
-    i_max, j_max, k_max = dim[0] - 1, dim[1] - 1, dim[2] - 1
-    neighbors = []
-
-    # Define main direction offsets
-    directions = [
-        (1, 0, 0), 
-        (-1, 0, 0),
-        (0, 1, 0), 
-        (0, -1, 0),
-        (0, 0, 1), 
-        (0, 0, -1),
-    ]
-
-    for di, dj, dk in directions:
-        ni, nj, nk = i + di, j + dj, k + dk
-
-        if 0 <= ni <= i_max and 0 <= nj <= j_max and 0 <= nk <= k_max:
-            if with_coords:
-                neighbors.append((ni, nj, nk, array[ni][nj][nk]))
-            else:
-                neighbors.append(array[ni][nj][nk])
-        elif flag_out_bounds:
-            if with_coords:
-                neighbors.append((ni, nj, nk, None))
-            else:
-                neighbors.append(None)
-
-    return neighbors
-"""
 def Get_Neighbors(array, i, j, k, connectivity=1, with_coords=False, flag_out_bounds=False):
 
     assert array.ndim == 3, "Only 3D arrays supported"
@@ -320,9 +192,10 @@ def Get_Neighbors(array, i, j, k, connectivity=1, with_coords=False, flag_out_bo
 
     return neighbors
 
+
+#"""
 import numpy as np
 from scipy.ndimage import binary_dilation
-"""
 def Remove_Internal_Solid(array, fluid_default_value=1, keep_boundary=False, connectivity=3):
     # Create a mask for solid voxels
     solid_mask = array != fluid_default_value
@@ -362,61 +235,9 @@ def Remove_Internal_Solid(array, fluid_default_value=1, keep_boundary=False, con
     new_array[internal_solid_mask] = fluid_default_value
 
     return new_array
-"""
 #"""
-def Remove_Internal_Solid(array, fluid_default_value=1, keep_boundary=False, connectivity=3):
 
-    new_array = array.copy()
 
-    solid_indices = np.argwhere(array != fluid_default_value)
-
-    for i, j, k in solid_indices:
-        neighbors = Get_Neighbors(array, i, j, k, flag_out_bounds=True, connectivity=connectivity)
-
-        has_fluid_neighbor = False
-        has_boundary_neighbor = False
-
-        for val in neighbors:
-            if val == fluid_default_value:
-                has_fluid_neighbor = True
-                break
-            if keep_boundary and val is None:
-                has_boundary_neighbor = True
-
-        if not has_fluid_neighbor and not has_boundary_neighbor:
-            new_array[i, j, k] = fluid_default_value  # mark internal solid as fluid
-
-    return new_array
-#"""
-"""
-# C-Like implementation
-
-def Remove_Internal_Solid(array, fluid_default_value=1, keep_boundary=False, connectivity=3):
-    # Create array to work on
-    new_array = array.copy()
-    
-    # Iterate over dimensions
-    dim = array.shape
-    for i in range(dim[0]):
-        for j in range(dim[1]):
-            for k in range(dim[2]):
-                # If the current cell is not fluid (samples and solid):
-                if array[i][j][k] != fluid_default_value:
-                    # Get surrounding values
-                    neighbors = Get_Neighbors(array, i, j, k, flag_out_bounds=True, connectivity=connectivity)
-                    
-                    any_fluid_neighbor = any((n == fluid_default_value) for n in neighbors)
-                    any_boundary_neighbor = any((n == None) for n in neighbors)
-                    
-                    # If any neighbor is fluid or boundary (if it must be kept too), the cell is not internal solid and must be kept as it is
-                    if any_fluid_neighbor or (keep_boundary and any_boundary_neighbor):
-                        continue  # Keep the current not internal (surface) solid cell
-                    # If not, it is an internal solid and must be set to fluid
-                    else:
-                        new_array[i][j][k] = fluid_default_value  # Set internal solid to fluid (fluid are not interpolated)
-
-    return new_array
-"""
 def euclidean(array1, array2):
     return np.linalg.norm(array1 - array2)
       
@@ -501,10 +322,7 @@ def WATERSHED_GRAIN_INTERPOLATION(volume, samples_coord, distance_function):
     return result 
 
 
-from scipy.optimize import curve_fit
 
-import multiprocessing
-from functools import partial
 def parallel_interpolate_task(domain_point, variogram_model, variogram_params, samples_coord, samples_values, distance_function, N,  universal):
     
     try:
@@ -913,46 +731,11 @@ def get_nearest_samples_indexes(domain_point, samples_coord, distance_function, 
     return near_indexes
     
 
-
-"""
-def KRIGING_INTERPOLATION(sub_volume, samples_coord, distance_function, solid_default_value=0):
-    hollow_sub_volume = Remove_Internal_Solid(sub_volume)
-    
-    # Get coordinates [(x,y,z),...] for all solid samples
-    domain_solid_coord = np.argwhere(hollow_sub_volume==solid_default_value)
-    
-    # Create a table with distances where columns refer to solid cells and rows refer to samples
-    dist_table = []
-    for sample_x,sample_y, sample_z in samples_coord:
-        dist_table_row = []
-        print(f"Analyzing sample ({sample_x},{sample_y}, {sample_z})")
-        for i,(domain_x, domain_y, domain_z) in enumerate(domain_solid_coord):
-            
-            dist = distance_function( np.array([sample_x, sample_y, sample_z]),  np.array([domain_x, domain_y, domain_z]) )
-            dist_table_row.append(dist)
-            if (i / len(domain_solid_coord)) * 100  % 5 == 0:
-                print(f"Analyzing sample ({sample_x},{sample_y}, {sample_z}): ", (i / len(domain_solid_coord)) * 100)
-            
-        dist_table.append(dist_table_row)
-    dist_table = np.array(dist_table)
-    
-    
-    samples_dist_table = []
-    for sample1_x,sample1_y, sample1_z in samples_coord:
-        samples_dist_table_row = []
-        for sample2_x,sample2_y, sample2_z in samples_coord:
-            dist = distance_function( np.array([sample1_x, sample1_y, sample1_z]),  np.array([sample2_x, sample2_y, sample2_z]) )
-            samples_dist_table_row.append(dist)
-        samples_dist_table.append(samples_dist_table_row)
-    samples_dist_table = np.array(samples_dist_table)
-"""
-
-  
     
     
     
 
-def SAMPLE_EXPANSION_INTERPOLATION(sub_volume, samples_coord, solid_default_value=0):
+def SAMPLE_EXPANSION_INTERPOLATION(sub_volume, samples_coord, solid_default_value=0, animate=True):
     
     # Limit expansion to surface by removing internal solid
     hollow_sub_volume = Remove_Internal_Solid(sub_volume, connectivity=3) # Keep a thick surface, keeping solids with any direction's fluid neighbors 
@@ -964,18 +747,18 @@ def SAMPLE_EXPANSION_INTERPOLATION(sub_volume, samples_coord, solid_default_valu
     
 
     # Progress tracking setup
-    """
-    save_interval = 5  # percent
-    total_solid_cells = max(np.count_nonzero(hollow_sub_volume == solid_default_value), 1)  # avoid division by 0
-    i_counter = 0
-    range_index = 0
-    ranges = np.arange(0, 100+2*save_interval, save_interval)
-    visited_ranges = []
-    frame_names = [] 
-    """
+    if animate:
+        save_interval = 1  # percent
+        total_solid_cells = max(np.count_nonzero(hollow_sub_volume == solid_default_value), 1)  # avoid division by 0
+        i_counter = 0
+        range_index = 0
+        ranges = np.arange(0, 100+2*save_interval, save_interval)
+        visited_ranges = []
+        frame_names = [] 
+    
+        
     
     while len(to_expand_coords) > 0:
-                
         # Get first element and remove it from queue
         i, j, k = to_expand_coords[0]
         to_expand_coords = to_expand_coords[1:]  # Remove first element        
@@ -998,26 +781,48 @@ def SAMPLE_EXPANSION_INTERPOLATION(sub_volume, samples_coord, solid_default_valu
             result_volume[tuple(np.array(n_coords.T))] = result_volume[i, j, k]
             to_expand_coords.extend(n_coords)
     
+        if animate:
+            # Progress tracking
+            progress = (100 * i_counter) / total_solid_cells
+            i_counter +=1
+            if ranges[range_index] <= progress < ranges[range_index+1] and not (range_index in visited_ranges):
+                visited_ranges.append(range_index)
+                range_index +=1
+                # 2D
+                
+                if sub_volume.shape[0] == 1:
+                    image_file = pl.Plot_Classified_Domain_2D(result_volume, f"aux_{i_counter}",remove_value=[0], 
+                    special_colors   = {
+                         0: (0.5, 0.5, 0.5, 1.0), # Assign grey for solid cells
+                         1: (0.0, 0.0, 0.0, 1.0)  # Assign black for void cells (removed from plot)
+                     },
+                    labels = {0:      "Original Solid Cells",
+                              1:      "Non-Surface Cells",
+                              119:     "Water-Wetting Cells (45º)",
+                              209:    "Oil-Wetting Cells (135º)",},
+                    show_label=False)
+                # 3D
+                else:
+                    image_file = pl.Plot_Classified_Domain(result_volume,
+                                                           f"aux_{i_counter}",
+                                                           remove_value=[1], 
+                                                           special_colors   = {
+                                                                0: (0.5, 0.5, 0.5, 1.0), # Assign grey for solid cells
+                                                                1: (0.0, 0.0, 0.0, 1.0)  # Assign black for void cells (removed from plot)
+                                                            },
+                                                           labels = {0:      "Original Solid Cells",
+                                                                     1:      "Void Space Cells",
+                                                                     119:     "Water-Wetting Cells (45º)",
+                                                                     209:    "Oil-Wetting Cells (135º)",})
+                frame_names.append(image_file)
     
-    """
-        # Progress tracking
-        progress = (100 * i_counter) / total_solid_cells
-        i_counter +=1
-        if ranges[range_index] <= progress < ranges[range_index+1] and not (range_index in visited_ranges):
-            visited_ranges.append(range_index)
-            range_index +=1
-            if volume_shape[0] == 1:
-                image_file = pl.plot_classified_map(result_volume, f"aux_{i_counter}")
-            else:
-                image_file = pl.Plot_Classified_Domain(result_volume, f"aux_{i_counter}", remove_value=[1])
-            frame_names.append(image_file)
-    pl.create_gif_from_filenames(
-        image_filenames = frame_names, 
-        gif_filename="TEST", 
-        duration=round(10000/len(frame_names)), 
-        loop=0, 
-        erase_plots=True)
-    """
+    if animate:
+        pl.create_gif_from_filenames(
+            image_filenames = frame_names, 
+            gif_filename    ="Animation", 
+            duration        = round(7500/len(frame_names)), 
+            loop=0, 
+            erase_plots=True)
     
     return result_volume
     
@@ -1038,7 +843,7 @@ def COLLECT_SAMPLES_COORDINATES(sub_array):
                     
     return samples_coord
                     
-def Keep_random_samples(volume, solid_value=0, fluid_value=1, N=0.1):
+def Keep_random_samples(volume, solid_value=0, fluid_value=1, kept_fraction=0.1):
 
     hollow_volume = Remove_Internal_Solid(volume)
     
@@ -1048,8 +853,9 @@ def Keep_random_samples(volume, solid_value=0, fluid_value=1, N=0.1):
     # Index of where samples are
     samples_mask_index = np.argwhere(samples_mask)
     
-    total_amount_samples = len(samples_mask_index)
-    N_kept_samples = int(N*total_amount_samples)
+    total_amount_samples    = len(samples_mask_index)
+    N_kept_samples          = int(kept_fraction*total_amount_samples)
+    
 
     # Select N indices to keep (if N is greater than available, keep all)
     keep_samples_mask_index = samples_mask_index[np.random.choice(len(samples_mask_index), N_kept_samples, replace=False)]
@@ -1071,18 +877,7 @@ def Change_Interpolated_Cells(final_volume, interpolated_volume, fluid_default_v
     changes_mask = interpolated_volume != fluid_default_value
     final_volume[changes_mask] = interpolated_volume[changes_mask]
     
-    """
-    (DEPRECATED C-LIKE CODE)
-    #for i in range(interpolated_volume.shape[0]):
-        #for j in range(interpolated_volume.shape[1]):
-            #for k in range(interpolated_volume.shape[2]):
-                # Where there was interpolation
-                #if interpolated_volume[i,j,k] != fluid_default_value:
-                    #final_volume[i,j,k] = interpolated_volume[i,j,k]
-    """
     return final_volume
-                    
-
         
 
 def GET_INTERPOLATED_DOMAIN(sampled_volume, interpolation_mode, fluid_default_value=1, solid_default_value=0):
@@ -1092,30 +887,19 @@ def GET_INTERPOLATED_DOMAIN(sampled_volume, interpolation_mode, fluid_default_va
     
     # COLLECT SAMPLES INFOS 
     samples_coord = COLLECT_SAMPLES_COORDINATES(sampled_volume)
-    
     # If there is no sample in the domain, neglect it
     if samples_coord:
-        
-        print("Calculating distance transform")
-        # GET THE DISTANCE OF EVERY CELL TO THE SUB-VOLUME SAMPLES
-        #if distance_mode=="euclidean":
-        #    distance_function = euclidean
-        #elif distance_mode=="path":
-        #    obj = surface_distance(sub_volume, samples_coord) 
-        #    distance_function = obj.get_distance     
-        #else:
-        #    raise Exception("Not Implemented.")
-                     
+    
         distance_function = euclidean
         
-        print("Interpolating")
+        print(" -- Interpolating")
         #  INTERPOLATE
         if interpolation_mode == "nn":
             interpolated_volume = NN_INTERPOLATION(sampled_volume, samples_coord, distance_function, solid_default_value)
         elif interpolation_mode == "watershed_grain":
             interpolated_volume = WATERSHED_GRAIN_INTERPOLATION(sampled_volume, samples_coord, distance_function)
         elif interpolation_mode == "expand_samples":
-            interpolated_volume = SAMPLE_EXPANSION_INTERPOLATION(sampled_volume, samples_coord)
+            interpolated_volume = SAMPLE_EXPANSION_INTERPOLATION(sampled_volume, samples_coord, animate=False)
         elif interpolation_mode == "kriging":
             interpolated_volume = KRIGING_INTERPOLATION(sampled_volume, 
                                                         samples_coord, 
@@ -1127,152 +911,506 @@ def GET_INTERPOLATED_DOMAIN(sampled_volume, interpolation_mode, fluid_default_va
                                                         variogram_sampling=0.2)
         else:
             raise Exception("Not Implemented.")
-        print("Interpolation finished")
+        print(" -- Interpolation finished")
 
         # Assign interpolated values to the right places
         final_volume = Change_Interpolated_Cells(final_volume, interpolated_volume)
 
     return final_volume
+
+from scipy.optimize import linear_sum_assignment
+from sklearn.mixture import GaussianMixture
+
+def get_to_GaussianMixture_label(measures_deg, ideal_centroids_deg, fluid_default_value=1, solid_default_value=0):
+    N_centroids         = len(ideal_centroids_deg)
+    # Cluster multi-normal continuous data into N values
+    gmm = GaussianMixture(n_components=N_centroids, random_state=0)
+    gmm.fit(measures_deg.reshape(-1, 1))
+    measures_labels     = gmm.predict(measures_deg.reshape(-1, 1))
+    measures_centroids  = [gmm.means_[index] for index in range(N_centroids)]
+    # Move values to their ideal centroids 
+    distance_matrix             = np.abs(ideal_centroids_deg - measures_centroids)
+    row_ind, col_ind            = linear_sum_assignment(distance_matrix)    
+    relabel_map                 = dict(zip(col_ind, ideal_centroids_deg[row_ind]))
+    measures_ideal_centroids    = np.array([relabel_map[label] for label in measures_labels])
+    
+    # Plot sampling distribution
+    plt.rcParams["font.family"] =  "DejaVu Serif"
+    n_clusters = len(np.unique(measures_labels))
+    colors = plt.cm.cool(np.linspace(0, 1, n_clusters))
+    plt.figure(figsize=(10, 5))
+    unique_labels = np.unique(measures_labels)
+    for i, label in enumerate(unique_labels):
+        cluster_mask = measures_labels == label
+        centroid_val = relabel_map[label]
+        counts_i, _, _ = plt.hist(
+            measures_deg[cluster_mask],
+            bins=10,
+            color=colors[i],
+            alpha=0.5,
+            label=f'Cluster {i}',
+            histtype='stepfilled'
+        )
+        plt.axvline(
+            gmm.means_[label][0],
+            color=colors[i],
+            linestyle='--',
+            linewidth=4,
+            label=f"Cluster {i} centroid"
+        )
+    
+    ax = plt.gca()
+    ax.set_xlim(-1, 180)
+    ticks = np.linspace(0, 180, 10).astype(int)
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(ticks, fontsize=18)  # X tick labels
+    ax.tick_params(axis='y', labelsize=16)  # Y tick labels
+    
+    # Set axis labels and title with fontsize
+    ax.set_title('Measurements Clusters', fontsize=20)
+    ax.set_xlabel('Measurement Value', fontsize=26)
+    ax.set_ylabel('Occurrences', fontsize=22)
+    
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig("clustered_histogram.png", dpi=300)
+    plt.savefig("clustered_histogram.svg", dpi=300)
+    plt.show()
+    
+    
+    return measures_ideal_centroids
+    
     
 def Get_Metrics(reference_volume, interpolated_volume, sampled_volume):
     if reference_volume.shape != interpolated_volume.shape:
         raise Exception(f"Shapes must match, but got {reference_volume.shape} != {interpolated_volume.shape}")
         
     # Remove internal solid areas before processing: do not count internal solid classifications
-    reference_volume = Remove_Internal_Solid(reference_volume)
+    reference_volume    = Remove_Internal_Solid(reference_volume)
     interpolated_volume = Remove_Internal_Solid(interpolated_volume)
     
     # Get mask of LBPM classes (not solid or fluids)
-    samples_mask = is_LBPM_class(sampled_volume) # Samples should not count into metrics
-    gt_classified_mask = is_LBPM_class(reference_volume) & ~ samples_mask  # Ground truth classified cells
-    result_classified_mask = is_LBPM_class(interpolated_volume) & ~ samples_mask # Interpolated classified cells
-    valid_mask = gt_classified_mask | result_classified_mask  # Union of classified cells
+    samples_mask            = is_LBPM_class(sampled_volume)                         # Samples should not count into metrics
+    gt_classified_mask      = is_LBPM_class(reference_volume) & ~ samples_mask      # Ground truth classified cells that werent classified
+    result_classified_mask  = is_LBPM_class(interpolated_volume) & ~ samples_mask   # Interpolated classified cells that werent classified
+    valid_mask = gt_classified_mask | result_classified_mask                        # Union of classified cells
     
-    # Get mask of cells correctly classified
-    right_classified_mask = gt_classified_mask & (reference_volume == interpolated_volume)
     
-    # **Compute Metrics Using Vectorized Operations**
-    count_gt_classified = np.count_nonzero(gt_classified_mask)
-    count_classifieds = np.count_nonzero(valid_mask)
-    count_success = np.count_nonzero(right_classified_mask)
-
-    # Compute Absolute and Percentage Errors
-    abs_errors = np.abs(reference_volume - interpolated_volume) * valid_mask
-    summed_abs_e = np.sum(abs_errors)
-    
-    # **Compute Final Metrics**
+    # === Accuracy (vectorized) ===
+    right_classified_mask   = gt_classified_mask & (reference_volume == interpolated_volume)
+    count_gt_classified     = np.count_nonzero(gt_classified_mask)
+    count_success           = np.count_nonzero(right_classified_mask)
     acc = count_success / count_gt_classified if count_gt_classified > 0 else 0
-    iou = count_success / count_classifieds if count_classifieds > 0 else 0
+    
+    
+    # === MAE (vectorized over classified union) ===
+    abs_errors = np.abs(reference_volume - interpolated_volume)
+    summed_abs_e = np.sum(abs_errors[valid_mask])
+    count_classifieds = np.count_nonzero(valid_mask)
     mae = summed_abs_e / count_classifieds if count_classifieds > 0 else 0
+    
+    
+    # === mIoU (per-class loop) ===
+    classes = np.unique(reference_volume[valid_mask])
+    iou_list = []
+    for c in classes:
+        gt_mask = (reference_volume == c) & valid_mask
+        pred_mask = (interpolated_volume == c) & valid_mask
+
+        intersection = np.count_nonzero(gt_mask & pred_mask)
+        union = np.count_nonzero(gt_mask | pred_mask)
+        if union > 0:
+            iou_list.append(intersection / union)
+    miou = np.mean(iou_list) if iou_list else 0
     
     return {
         "Accuracy": acc, 
-        "IOU": iou,
+        "MIOU": miou,
         "MAE": mae,
     }
 
 
+def histogram_analysis(volume_rock, 
+                       volume_ground_truth, 
+                       interpolated_volume,
+                       guided_interpolated_volume,
+                       sampled_volume,
+                       output_base_file_name,
+                       fluid_default_value=1,
+                       solid_default_value=0,
+                       special_colors={},
+                       labels={}):
+    # Convert 
+    volume_shape = volume_rock.shape
+    surface_volume = Remove_Internal_Solid(volume_rock, fluid_default_value)
+    
+    print("\nPlotting:")
+    # COMPUTATIONS FOR PLOTS 
+    # Make masks
+    surface_mask = surface_volume != fluid_default_value # True -> Interface cell, False -> Internal Solid or Fluid
+    samples_mask = (sampled_volume != fluid_default_value) & (sampled_volume != solid_default_value) # True -> Samples cell, False - > Non sample cell 
+    interpolated_mask = (interpolated_volume != fluid_default_value) & (interpolated_volume != solid_default_value)
+    guided_interpolated_mask = (guided_interpolated_volume != fluid_default_value) & (guided_interpolated_volume != solid_default_value)
+    sampled_surface_mask = (surface_mask) & (samples_mask)
+    
+    
+    # SURFACE VALUES (surface_mask)
+    ground_truth_surface_values = volume_ground_truth[surface_mask]
+    ground_truth_surface_values_inDegrees = LBPM_class_2_value(ground_truth_surface_values, keep_values=())
+    
+    ground_truth_sampled_values = volume_ground_truth[sampled_surface_mask]
+    ground_truth_sampled_values_inDegrees = LBPM_class_2_value(ground_truth_sampled_values, keep_values=())
+    
+    sampled_values = sampled_volume[samples_mask]
+    sampled_values_inDegrees = LBPM_class_2_value(sampled_values, keep_values=())
+    
+    interpolated_surface_values = interpolated_volume[interpolated_mask]
+    interpolated_surface_values_inDegrees = LBPM_class_2_value(interpolated_surface_values, keep_values=())
+    
+    guided_interpolated_surface_values = guided_interpolated_volume[guided_interpolated_mask]
+    guided_interpolated_surface_values_inDegrees = LBPM_class_2_value(guided_interpolated_surface_values, keep_values=())
+    
+    
+    # SURFACE ERRORS
+    intp_and_gt_mask = (interpolated_mask) & (surface_mask) 
+    cell = interpolated_volume[intp_and_gt_mask]
+    ref = volume_ground_truth[intp_and_gt_mask]
+    interpolation_error_inDegrees = LBPM_class_2_value(cell, keep_values=()) - LBPM_class_2_value(ref, keep_values=())
+    interpolation_error_volume_inDegrees = np.full(volume_shape, -1000)
+    interpolation_error_volume_inDegrees[intp_and_gt_mask] = interpolation_error_inDegrees
+    
+    
+    guidintp_and_gt_mask = (guided_interpolated_mask) & (surface_mask)
+    cell = guided_interpolated_volume[guidintp_and_gt_mask]
+    ref = volume_ground_truth[guidintp_and_gt_mask]
+    guided_interpolation_error_inDegrees = LBPM_class_2_value(cell, keep_values=()) - LBPM_class_2_value(ref, keep_values=())
+    guided_interpolation_error_volume_inDegrees = np.full(volume_shape, -1000)
+    guided_interpolation_error_volume_inDegrees[guidintp_and_gt_mask] = guided_interpolation_error_inDegrees
+    
+    
+    guidance_and_gt_mask = (guided_interpolated_mask) & (interpolated_mask)
+    cell = interpolated_volume[guidance_and_gt_mask]
+    ref = guided_interpolated_volume[guidance_and_gt_mask]
+    guidance_error_inDegrees = LBPM_class_2_value(cell, keep_values=()) - LBPM_class_2_value(ref, keep_values=())
+    guidance_error_volume_inDegrees = np.full(volume_shape, -1000)
+    guidance_error_volume_inDegrees[guidance_and_gt_mask] = guidance_error_inDegrees
+    
+    
+    # SAMPLES VALUES (samples_mask)
+    samples_and_gt_mask = (samples_mask) & (surface_mask)
+    cell = sampled_volume[samples_and_gt_mask]
+    ref = volume_ground_truth[samples_and_gt_mask]
+    sampled_error_inDegrees = LBPM_class_2_value(cell, keep_values=()) - LBPM_class_2_value(ref, keep_values=())
+    
+    
+    # Define the ground_truth contact angles for plotting
+    ground_truth_classes = np.unique(volume_ground_truth[samples_and_gt_mask])
+    ground_truth_classes_inDegrees = LBPM_class_2_value(ground_truth_classes)
+    
+    
+    print("--Plotting Histograms")
+    pl.plot_hist(
+        {'Ground Truth': ground_truth_surface_values_inDegrees, 
+         'Sampled Ground Truth':ground_truth_sampled_values_inDegrees,
+         'Measures': sampled_values_inDegrees, # OK
+         'Guided Interpolation': guided_interpolated_surface_values_inDegrees,
+         'Interpolation': interpolated_surface_values_inDegrees,
+        },
+        bins=40, 
+        title="Distribution Comparison",
+        notable= ground_truth_classes_inDegrees,
+        filename=output_base_file_name+"histogram",
+        xlim=(0,180)
+        )
+         
+    pl.plot_hist(
+        {'Guided Interpolation errors (guided interpolation surface  -  ground truth surface)': guided_interpolation_error_inDegrees,
+         'Measures errors (samples  -  ground_truth sampled cells)': sampled_error_inDegrees,
+         'Interpolation errors (interpolation surface  -  ground truth surface)': interpolation_error_inDegrees, 
+         'Guidance Error (interpolation surface - guided interpolation surface)': guidance_error_inDegrees
+         },
+        bins=40, 
+        title="Distribution of Errors",
+        filename=output_base_file_name+"error_histogram",
+        xlim=(-180, 180)
+        )
+    
+    print("--Plotting Domains")
+    pl.Plot_Domain(interpolated_volume, 
+                   output_base_file_name+"interpolated", 
+                   remove_value=[1],
+                   special_colors = special_colors)
+    
+    pl.Plot_Classified_Domain(guided_interpolated_volume, 
+                   output_base_file_name+"guided_interpolated", 
+                   remove_value=[1],
+                   special_colors = special_colors,
+                   labels=labels)
+    
+    pl.Plot_Domain(interpolation_error_volume_inDegrees, 
+                   output_base_file_name+"interpolation_error", 
+                   remove_value=[-1000],
+                   #clim=[np.min(interpolation_error_volume_inDegrees), np.max(interpolation_error_volume_inDegrees)],
+                   colormap='RdBu',
+                   lbpm_class=False)
+    
+    pl.Plot_Domain(guided_interpolation_error_volume_inDegrees, 
+                   output_base_file_name+"guided_interpolation_error", 
+                   remove_value=[-1000],
+                   #clim=[np.min(guided_interpolation_error_volume_inDegrees), np.max(guided_interpolation_error_volume_inDegrees)],
+                   colormap='RdBu',
+                   lbpm_class=False)
+    
+    pl.Plot_Domain(guidance_error_volume_inDegrees, 
+                   output_base_file_name+"guidance_error", 
+                   remove_value=[-1000],
+                   #clim=[np.min(guidance_error_volume_inDegrees), np.max(guidance_error_volume_inDegrees)],
+                   colormap='RdBu',
+                   lbpm_class=False)
+
+    
+    
+    # ANALYSIS PER CLASS
+    colors = ['green', 'red', 'yellow']
+    for gt_class, color in zip(ground_truth_classes,colors):
+        
+        class_mask = (volume_ground_truth == gt_class)
+        
+        intp_and_gt_mask = (interpolated_mask) & (surface_mask) & (class_mask)
+        cell = interpolated_volume[intp_and_gt_mask]
+        ref = volume_ground_truth[intp_and_gt_mask]
+        interpolation_error_inDegrees = LBPM_class_2_value(cell, keep_values=()) - LBPM_class_2_value(ref, keep_values=())
+        interpolation_error_volume_inDegrees = np.full(volume_shape, -1000)
+        interpolation_error_volume_inDegrees[intp_and_gt_mask] = interpolation_error_inDegrees
+        
+        
+        guidintp_and_gt_mask = (guided_interpolated_mask) & (surface_mask)  & (class_mask)
+        cell = guided_interpolated_volume[guidintp_and_gt_mask]
+        ref = volume_ground_truth[guidintp_and_gt_mask]
+        guided_interpolation_error_inDegrees = LBPM_class_2_value(cell, keep_values=()) - LBPM_class_2_value(ref, keep_values=())
+        guided_interpolation_error_volume_inDegrees = np.full(volume_shape, -1000)
+        guided_interpolation_error_volume_inDegrees[guidintp_and_gt_mask] = guided_interpolation_error_inDegrees
+        
+        
+        guidance_and_gt_mask = (guided_interpolated_mask) & (interpolated_mask) & (class_mask)
+        cell = interpolated_volume[guidance_and_gt_mask]
+        ref = guided_interpolated_volume[guidance_and_gt_mask]
+        guidance_error_inDegrees = LBPM_class_2_value(cell, keep_values=()) - LBPM_class_2_value(ref, keep_values=())
+        guidance_error_volume_inDegrees = np.full(volume_shape, -1000)
+        guidance_error_volume_inDegrees[guidance_and_gt_mask] = guidance_error_inDegrees
+        
+        
+        samples_and_gt_mask = (samples_mask) & (surface_mask)  & (class_mask)
+        cell = sampled_volume[samples_and_gt_mask]
+        ref = volume_ground_truth[samples_and_gt_mask]
+        sampled_error_inDegrees = LBPM_class_2_value(cell, keep_values=()) - LBPM_class_2_value(ref, keep_values=())
+        
+        pl.plot_hist(
+            {'Guided Interpolation errors (guided interpolation surface  -  ground truth surface)': guided_interpolation_error_inDegrees,
+             'Measures errors (samples  -  ground_truth sampled cells)': sampled_error_inDegrees,
+             'Interpolation errors (interpolation surface  -  ground truth surface)': interpolation_error_inDegrees, 
+             'Guidance Error (interpolation surface - guided interpolation surface)': guidance_error_inDegrees
+             },
+            bins=40, 
+            title="Distribution of Errors for Contact Angle of {LBPM_class_2_value(gt_class)}",
+            filename=output_base_file_name+f"error_histogram_{LBPM_class_2_value(gt_class)}",
+            xlim=(-180, 180),
+            color=color
+            )
 
 
 """
-(DEPRECATED USAGE)
+# FRAMEWORK WAY
+from skimage.feature import peak_local_max
+def compute_local_maxima(volume, distance_map, max_filtered, min_distance=3):
 
-class surface_distance():
-    
-    def __init__(self, volume, samples_coord=None):
-        self.field_binary = ~volume.astype(bool) # boolean field for seach (0->True is the search area) 
-        self.samples_coord = samples_coord
-        self.pre_processed = samples_coord is not None
-        self.parents = []
-        
-        
-        if self.pre_processed:
-            for sample_x,sample_y,sample_z in samples_coord:              
-                self.field_binary = self.field_binary.astype(int)
-                source_field = dijkstra3d.parental_field(volume, source=(sample_x,sample_y,sample_z), connectivity=6)
-                
-                self.parents.append(
-                    {"source_field": source_field,
-                     "source_coordinate": (sample_x,sample_y,sample_z)
-                        })
-                
-            
-    def get_distance(self, source, target):
-        
-        path = np.array([])
+    # Check dimensions
+    if volume.ndim not in [2, 3]:
+        raise ValueError("Input volume must have 2 or 3 dimensions.")
+    # Find local peaks with a minimum separation distance
+    local_max_coords = peak_local_max(
+        distance_map,
+        min_distance=min_distance,  # Ensures well-separated centers
+        indices=True,               # Returns coordinates
+        exclude_border=False        # Includes borders if needed
+    )
+    # Create a boolean mask with peaks set to True
+    local_max = np.zeros_like(distance_map, dtype=bool)
+    local_max[tuple(local_max_coords.T)] = True
 
-        # Find path
-        if self.pre_processed: 
-            for source_infos in self.parents:
-                sample_x, sample_y, sample_z = source_infos["source_coordinate"]
-                source_field = source_infos["source_field"]
-                if sample_x==source[0] and sample_y==source[1] and sample_z==source[2]:
-                    path = dijkstra3d.path_from_parents(source_field, target=(target[0], target[1], target[2]))
-        else:
-            path = dijkstra3d.binary_dijkstra(self.field_binary, source, target, connectivity=26, background_color=0,euclidean_metric=True)
+    return local_max
 
-
-
-        # If there is no available path set the distance to infinit
-        if path.size > 0:
-            distance = self.calculate_path_size(path)
-            return distance 
-        else:
-            return np.inf
-    
-    def calculate_path_size(self, path, approximate=False):    
-        if approximate==True: return len(path)
-        return sum( euclidean(path[i], path[i-1]) for i in range(1,len(path)) )
-  
-def CLUSTER(volume, cluster_mode='grains',fluid_default=1, file_name=""):
-    
-    if cluster_mode=='grains':
-        # Convert to binary: 1 for solid, 0 for void (fluid)
-        solid_volume = (volume != fluid_default).astype(np.uint8)
-        
-        connected_labels, valid_labels, distance_map, local_max = Watershed(solid_volume, file_name)
-        
-        volume_labelled = Set_Solid_to_Solid_Label(volume, connected_labels, valid_labels)
-
-        
-    elif cluster_mode=='pores':
-        # Convert to binary: 0 for solid, 1 for void (fluid)
-        solid_volume = 1-(volume != fluid_default).astype(np.uint8)
-        
-        connected_labels, valid_labels, distance_map, local_max = Watershed(solid_volume, file_name)
-        
-        # Set the interfaced solid to the void label
-        volume_labelled = Set_Solid_to_Void_Label(volume, connected_labels, valid_labels)
-        
-    elif cluster_mode == 'none':
-        return  [volume], [0] 
-        
-    else:
-        raise Exception("Unkown clustering mode {mode}. Choose grains or pores as mode.")
-        
-    
-    # Save infos
-    sub_arrays = []
-    for label_value in valid_labels:
-        # Mask only the desired cluster
-        mask = (volume_labelled == label_value)
-        # Get sub-array with just the solid cells and samples of the cluster
-        sub_array = np.where(mask, volume, fluid_default).astype(np.uint8)
-        # Do not save clusters with only fluid cells
-        if np.any(sub_array!= fluid_default):
-            sub_arrays.append(sub_array)
-            
-    
-    if file_name != "":        
-        Plot_Classified_Domain(connected_labels, file_name+"_conn_sol", remove_value=[1,0])
-        Plot_Classified_Domain(hollow_volume_labelled, file_name+"_hollow_conn_sol", remove_value=[1,0])
-        plot_classified_map(hollow_volume[0,:,:], file_name+"_hollow_volume_2D")
-        plot_classified_map(connected_labels[0,:,:], file_name+"_conn_sol_2D")
-        plot_classified_map(hollow_volume_labelled[0,:,:], file_name+"_hollow_conn_sol_2D")
-    
-    return sub_arrays, valid_labels
 """
 
-    
+"""
+# MY BASIC WAY
+def compute_local_maxima(volume, distance_map, max_filtered):
 
+    
+    # Check dimensions
+    if volume.ndim not in [2, 3]:
+        raise Exception("Make sure np.array has 2 or 3 dimensions.")
+
+    # Compute gradient only where dimension > 1
+    gradient_x = np.gradient(distance_map, axis=0) if distance_map.shape[0] > 1 else np.zeros_like(distance_map)
+    gradient_y = np.gradient(distance_map, axis=1) if distance_map.shape[1] > 1 else np.zeros_like(distance_map)
+    
+    if volume.ndim == 3:
+        gradient_z = np.gradient(distance_map, axis=2) if distance_map.shape[2] > 1 else np.zeros_like(distance_map)
+        local_max = (
+            ((gradient_x == 0) & (gradient_y == 0)) |
+            ((gradient_y == 0) & (gradient_z == 0)) |
+            ((gradient_x == 0) & (gradient_z == 0))
+        ) & (distance_map == max_filtered) & (distance_map > 0)
+
+    elif volume.ndim == 2:
+        local_max = (
+            (gradient_x == 0) & (gradient_y == 0)
+        ) & (distance_map == max_filtered) & (distance_map > 0)
+
+    return local_max
+"""
+
+"""
+# Ensure that the labels are set to the surface solid cells
+def Set_Solid_to_Void_Label(hollow_volume, connected_labels,valid_labels, solid_cell=0, fluid_default=1):
+    
+    result = hollow_volume.copy() # Avoid comparing already set labels as fluid or samples 
+    
+    for i in range(hollow_volume.shape[0]):  
+        for j in range(hollow_volume.shape[1]):  
+            for k in range(hollow_volume.shape[2]): 
+                
+                element = hollow_volume[i, j, k]
+                
+                # If its a non-fluid cell: analyse to assign to label
+                if element != fluid_default:
+                    
+                    neighbors = Get_Neighbors(connected_labels, i, j, k)
+      
+                    for item in neighbors:      
+                        if item in valid_labels:
+                            # If any neighbor is a non-solid (label): copy the value
+                            result[i, j, k] = item
+    return result
+"""
+"""
+# DEPRECATED VERSION
+def Get_Neighbors(array, i, j, k, with_coords=False, flag_out_bounds=False):
+    dim = array.shape
+    i_max, j_max, k_max = dim[0] - 1, dim[1] - 1, dim[2] - 1
+    neighbors = []
+
+    for di in range(-1, 2):
+        for dj in range(-1, 2):
+            for dk in range(-1, 2):
+                
+                if di == 0 and dj == 0 and dk == 0:
+                    continue  # Skip the current cell
+
+                ni, nj, nk = i + di, j + dj, k + dk
+
+                if 0 <= ni <= i_max and 0 <= nj <= j_max and 0 <= nk <= k_max:
+                    if with_coords:
+                        neighbors.append((ni, nj, nk, array[ni][nj][nk]))
+                    else:
+                        neighbors.append(array[ni][nj][nk])
+                        
+                elif flag_out_bounds:
+                    if with_coords:
+                        neighbors.append((ni, nj, nk, None))
+                    else:
+                        neighbors.append(None)
+                
+    return neighbors
+"""
+
+"""
+# DEPRECATED VERSION
+def Get_Neighbors(array, i, j, k, with_coords=False, flag_out_bounds=False):
+    dim = array.shape
+    i_max, j_max, k_max = dim[0] - 1, dim[1] - 1, dim[2] - 1
+    neighbors = []
+
+    # Define main direction offsets
+    directions = [
+        (1, 0, 0), 
+        (-1, 0, 0),
+        (0, 1, 0), 
+        (0, -1, 0),
+        (0, 0, 1), 
+        (0, 0, -1),
+    ]
+
+    for di, dj, dk in directions:
+        ni, nj, nk = i + di, j + dj, k + dk
+
+        if 0 <= ni <= i_max and 0 <= nj <= j_max and 0 <= nk <= k_max:
+            if with_coords:
+                neighbors.append((ni, nj, nk, array[ni][nj][nk]))
+            else:
+                neighbors.append(array[ni][nj][nk])
+        elif flag_out_bounds:
+            if with_coords:
+                neighbors.append((ni, nj, nk, None))
+            else:
+                neighbors.append(None)
+
+    return neighbors
+"""
+
+"""
+def Remove_Internal_Solid(array, fluid_default_value=1, keep_boundary=False, connectivity=3):
+
+    new_array = array.copy()
+
+    solid_indices = np.argwhere(array != fluid_default_value)
+
+    for i, j, k in solid_indices:
+        neighbors = Get_Neighbors(array, i, j, k, flag_out_bounds=True, connectivity=connectivity)
+
+        has_fluid_neighbor = False
+        has_boundary_neighbor = False
+
+        for val in neighbors:
+            if val == fluid_default_value:
+                has_fluid_neighbor = True
+                break
+            if keep_boundary and val is None:
+                has_boundary_neighbor = True
+
+        if not has_fluid_neighbor and not has_boundary_neighbor:
+            new_array[i, j, k] = fluid_default_value  # mark internal solid as fluid
+
+    return new_array
+"""
+"""
+# C-Like implementation
+
+def Remove_Internal_Solid(array, fluid_default_value=1, keep_boundary=False, connectivity=3):
+    # Create array to work on
+    new_array = array.copy()
+    
+    # Iterate over dimensions
+    dim = array.shape
+    for i in range(dim[0]):
+        for j in range(dim[1]):
+            for k in range(dim[2]):
+                # If the current cell is not fluid (samples and solid):
+                if array[i][j][k] != fluid_default_value:
+                    # Get surrounding values
+                    neighbors = Get_Neighbors(array, i, j, k, flag_out_bounds=True, connectivity=connectivity)
+                    
+                    any_fluid_neighbor = any((n == fluid_default_value) for n in neighbors)
+                    any_boundary_neighbor = any((n == None) for n in neighbors)
+                    
+                    # If any neighbor is fluid or boundary (if it must be kept too), the cell is not internal solid and must be kept as it is
+                    if any_fluid_neighbor or (keep_boundary and any_boundary_neighbor):
+                        continue  # Keep the current not internal (surface) solid cell
+                    # If not, it is an internal solid and must be set to fluid
+                    else:
+                        new_array[i][j][k] = fluid_default_value  # Set internal solid to fluid (fluid are not interpolated)
+
+    return new_array
+"""
          
