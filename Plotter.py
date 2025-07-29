@@ -112,7 +112,7 @@ def Plot_Domain(values, filename, remove_value=[], colormap='cool', lbpm_class=T
     return filename + ".png"
 
 def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colormap='cool', 
-                           show_label=True, special_colors={}, 
+                           show_label=False, special_colors={}, 
                            show_edges=False, lighting=True,
                            smooth_shading=False, split_sharp_edges=False,
                            ambient=None, diffuse=None, specular=None):
@@ -131,10 +131,18 @@ def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colorma
     # Create mapping (normalization, treating values in any range as classes)
     unique_classes                  = np.unique(values)     # Ex: 3
     unique_classes_afterRemoving    = unique_classes[~np.isin(unique_classes, remove_value)]
-    expoente        = math.floor(  math.log10((1/ (len(unique_classes_afterRemoving)-1)))   ) # Ex: -1
-    delta           = 10 ** expoente        # Ex: 10^-1 = 0.1 (added for safety)
-    n_decimals      = np.abs(expoente)+1    # Rounding decimals (for safety, one above the needed / one extra decimal )
-    discrete_linspace_values    = np.linspace(start=0, stop=1, num=len(unique_classes_afterRemoving)) # Create a linear mapping with N value between 0 and 1
+    n_classes                       = len(unique_classes_afterRemoving)
+    if n_classes <=1:
+        expoente    = 0
+        delta       = 1.0
+        n_decimals  = 3  # arbitrary safety default
+        discrete_linspace_values = np.array([0.5] if n_classes == 1 else [])
+    else:
+        expoente        = math.floor(  math.log10((1/ (len(unique_classes_afterRemoving)-1)))   ) # Ex: -1
+        delta           = 10 ** expoente        # Ex: 10^-1 = 0.1 (added for safety)
+        n_decimals      = np.abs(expoente)+1    # Rounding decimals (for safety, one above the needed / one extra decimal )
+        discrete_linspace_values    = np.linspace(start=0, stop=1, num=len(unique_classes_afterRemoving)) # Create a linear mapping with N value between 0 and 1
+    
     normalized_mapping          = {class_i:     round(norm_val, n_decimals)  for class_i, norm_val in zip(unique_classes_afterRemoving, discrete_linspace_values)}
     denormalization_mapping     = {v:           round(k,        n_decimals)    for k, v in normalized_mapping.items()}
     
@@ -187,84 +195,101 @@ def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colorma
             color_list.append(mcolors.to_hex(color, keep_alpha=True))
             color_index +=1
     
-    # MAKE CUSTOM TICKS
-    # Evenly distribute tick locations to avoid overlap, even if values are far apart
-    if num_nonDefault_classes > 1:
-        tick_positions = np.linspace(0, 1, num_mesh_unique_values+1)[0:-1]
-        tick_positions = tick_positions + (tick_positions[1]-tick_positions[0])/2 # Set position to the middle of the range
-    else:
-        tick_positions = [discrete_linspace_values[0]]
-    # Create annotation mapping with proper spacing
-    annotations = {}
     
-    for tick, val in zip(tick_positions, mesh_unique_values):
-        original_val = denormalization_mapping[val]
-        if int(denormalization_mapping[val]) in labels or float(denormalization_mapping[val]) in labels:
-            annotations[tick] = f"                                     {labels[original_val]}" 
-        else:
-            annotations[tick] = f"                                     {original_val}"
     
     
     # MAKE THE PLOT
     plotter = pv.Plotter(window_size=[1920*3, 1080*3])  # Full HD resolution
     plotter.set_background(color=None)
-    if mesh.n_cells > 0:
-        plotter.add_mesh(
-            mesh,
-            scalars     =mesh["class_values"],
-            show_scalar_bar=False,
-            categories  =True,
-            cmap        =color_list,
-            show_edges  =show_edges,
-            lighting    =lighting,
-            smooth_shading      =smooth_shading,
-            split_sharp_edges   =split_sharp_edges,
-            ambient=ambient, 
-            diffuse=diffuse, 
-            specular=specular,
-            #annotations         =annotations,
-            #scalar_bar_args={
-            #    "title": "    Classes",
-            #    "vertical":         True,
-            #    "title_font_size":  40,
-            #    "label_font_size":  25,
-            #    "position_x":       0.8,
-            #    "position_y":       0.05,
-            #    "height":           0.9,
-            #    "width":            0.05,
-            #    "n_labels":         0,
-            #},"""
-            clim=[0,1]  
-        )
+    if show_label:
+        # MAKE CUSTOM TICKS
+        # Evenly distribute tick locations to avoid overlap, even if values are far apart
+        if num_nonDefault_classes > 1:
+            tick_positions = np.linspace(0, 1, num_mesh_unique_values+1)[0:-1]
+            tick_positions = tick_positions + (tick_positions[1]-tick_positions[0])/2 # Set position to the middle of the range
+        else:
+            tick_positions = [discrete_linspace_values[0]]
+        # Create annotation mapping with proper spacing
+        annotations = {}
+        for tick, val in zip(tick_positions, mesh_unique_values):
+            original_val = denormalization_mapping[val]
+            if int(denormalization_mapping[val]) in labels or float(denormalization_mapping[val]) in labels:
+                annotations[tick] = f"                                     {labels[original_val]}" 
+            else:
+                annotations[tick] = f"                                     {original_val}"
+                
+        if mesh.n_cells > 0:
+            plotter.add_mesh(
+                mesh,
+                scalars     =mesh["class_values"],
+                show_scalar_bar=True,
+                categories  =True,
+                cmap        =color_list,
+                show_edges  =show_edges,
+                lighting    =lighting,
+                smooth_shading      =smooth_shading,
+                split_sharp_edges   =split_sharp_edges,
+                ambient=ambient, 
+                diffuse=diffuse, 
+                specular=specular,
+                annotations         =annotations,
+                scalar_bar_args={
+                    "title": "    Classes",
+                    "vertical":         True,
+                    "title_font_size":  40,
+                    "label_font_size":  25,
+                    "position_x":       0.8,
+                    "position_y":       0.05,
+                    "height":           0.9,
+                    "width":            0.05,
+                    "n_labels":         0,
+                },
+                clim=[0,1]  
+            )
         
-    """
-    # Add axis in, dicators
-    plotter.add_axes(
-        line_width=5,      
-        cone_radius=0.6,     
-        shaft_length=0.9, 
-        tip_length=0.2,
-        ambient=0.5,
-        label_size=(0.25, 0.15)
-    )
-
-    # Show grid bounds
-    plotter.show_bounds(
-        grid='back',
-        location='outer',
-        ticks='both',
-        show_xlabels=True,
-        show_ylabels=True,
-        show_zlabels=True,
-        n_xlabels=4,
-        n_ylabels=4,
-        n_zlabels=4,
-        font_size=15,
-        xtitle='x',
-        ytitle='y',
-        ztitle='z'
-    )
-    """
+        # Add axis in, dicators
+        plotter.add_axes(
+            line_width=5,      
+            cone_radius=0.6,     
+            shaft_length=0.9, 
+            tip_length=0.2,
+            ambient=0.5,
+            label_size=(0.25, 0.15)
+        )
+    
+        # Show grid bounds
+        plotter.show_bounds(
+            grid='back',
+            location='outer',
+            ticks='both',
+            show_xlabels=True,
+            show_ylabels=True,
+            show_zlabels=True,
+            n_xlabels=4,
+            n_ylabels=4,
+            n_zlabels=4,
+            font_size=15,
+            xtitle='x',
+            ytitle='y',
+            ztitle='z'
+        )
+    else:
+        if mesh.n_cells > 0:
+            plotter.add_mesh(
+                mesh,
+                scalars     =mesh["class_values"],
+                show_scalar_bar=False,
+                categories  =True,
+                cmap        =color_list,
+                show_edges  =show_edges,
+                lighting    =lighting,
+                smooth_shading      =smooth_shading,
+                split_sharp_edges   =split_sharp_edges,
+                ambient=ambient, 
+                diffuse=diffuse, 
+                specular=specular,
+                clim=[0,1]  
+            )
 
     # Show the visualization
     plotter.show(auto_close=False)

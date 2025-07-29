@@ -85,14 +85,47 @@ volume_shape        = (200,200,200)
 # Input files in format: {"desired title for the rock": ("path to rock .raw", "path for rock measures")}
 # :: Ground Truth: must be LBPM Class (0, 1, 74...254)
 # :: Measures must be rads or grad
-input_files = { 
-    """
+input_files = {
     "Bentheimer_0": 
-        (
-        "/home/gabriel/Desktop/Molhabilidade/ContactAngle_Interpolation-main --- INTERPORE TEST CODE/Slide Images/Exemplo Medicoes/benthheimer_200x200x200__0_volume_final.raw",                      # Ground Truth .raw
-        "/home/gabriel/Desktop/Molhabilidade/ContactAngle_Interpolation-main --- INTERPORE TEST CODE/Slide Images/Exemplo Medicoes/benthheimer_200x200x200__0_morpho_drain_it1mi_AngleMeasures_filtered.npy"   # Measures .npy
-        ),
-    """
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__0/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__0/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_1": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__1/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__1/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_2": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__2/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__2/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_3": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__3/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__3/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_4": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__4/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__4/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_5": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__5/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__5/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_6": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__6/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__6/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_7": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__7/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__7/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_8": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__8/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__8/AngleMeasures_filtered.npy"
+         ),        
+    "Bentheimer_9": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__9/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__9/AngleMeasures_filtered.npy"
+         ),    
 }
 measures_format = 'deg' # 'deg' or 'rad'
 
@@ -118,7 +151,10 @@ labels = {util.value_2_LBPM_class(angle): label for angle, label in labels.items
 # Perfomance metrics
 accuracy = []
 guided_accuracy = []
+uniform_accuracy = []
 sampled_percent = []
+packing_error = []
+measures_error = []
 # Perform analysis for for each rock listed
 for title, (input_file_name, measure_file_name) in input_files.items():            
     
@@ -162,16 +198,21 @@ for title, (input_file_name, measure_file_name) in input_files.items():
     ###############################################################################
     #--- COMPUTATION --------------------------------------------------------------
     print("\nVolume interpolation: Starting computation (counting time)")
-    print("sampled volume: ", np.max(sampled_volume), np.min(sampled_volume))
     start_time = time.time()
-    interpolated_volume = util.GET_INTERPOLATED_DOMAIN( sampled_volume, interpolation_mode, fluid_default_value, solid_default_value)
+    interpolated_volume = util.GET_INTERPOLATED_DOMAIN(sampled_volume, interpolation_mode, fluid_default_value, solid_default_value)
     stopping_time = time.time()
     print("Volume interpolation: Ending Computation")
-    print("Volume GUIDED interpolation: Starting computation (not counting time)")
     # Guided Interpolation: what the interpolation looks like if the samples are perfectly measured (but keeping location)
+    print("Volume GUIDED interpolation: Starting computation")
     guided_sampled_volume = create_guided_sampled_volume(volume_rock, volume_ground_truth, valid_coordinates)
     guided_interpolated_volume = util.GET_INTERPOLATED_DOMAIN( guided_sampled_volume, interpolation_mode, fluid_default_value, solid_default_value)
     print("Volume GUIDED interpolation: Ending Computation") 
+    # Uniform Interpolation: what the interpolation looks like if the samples are perfectly measured and uniformly distributed along the surface
+    print("Volume UNIFORM interpolation: Starting computation")
+    sampled_fraction = len(measures_deg)/np.count_nonzero(surface_volume==solid_default_value)
+    uniform_sampled_volume = util.Keep_random_samples(volume_ground_truth, kept_fraction=sampled_fraction, solid_value=solid_default_value, fluid_value=fluid_default_value)
+    uniform_interpolated_volume = util.GET_INTERPOLATED_DOMAIN(uniform_sampled_volume, interpolation_mode, fluid_default_value, solid_default_value)
+    print("Volume UNIFORM interpolation: Ending Computation") 
     #------------------------------------------------------------------------------
     ###############################################################################   
     
@@ -242,22 +283,35 @@ for title, (input_file_name, measure_file_name) in input_files.items():
     print("\nGetting performance metrics")
     metrics_info        = util.Get_Metrics(volume_ground_truth, interpolated_volume, sampled_volume)
     accuracy.append(metrics_info['Accuracy'])
-    guided_metrics_info = util.Get_Metrics(volume_ground_truth, guided_interpolated_volume, sampled_volume)
+    guided_metrics_info = util.Get_Metrics(volume_ground_truth, guided_interpolated_volume, guided_sampled_volume)
     guided_accuracy.append(guided_metrics_info['Accuracy'])
-    sampled_percent.append(100*len(measures_deg)/np.count_nonzero(surface_volume==solid_default_value))
+    uniform_metrics_info = util.Get_Metrics(volume_ground_truth, uniform_interpolated_volume, uniform_sampled_volume)
+    uniform_accuracy.append(uniform_metrics_info['Accuracy'])
+    packing_error.append(uniform_metrics_info['Accuracy'] - guided_metrics_info['Accuracy'])
+    measures_error.append(guided_metrics_info['Accuracy'] - metrics_info['Accuracy'])
+    sampled_percent.append(100*sampled_fraction)
     #------------------------------------------------------------------------------
     ###############################################################################
     
+    break
 
 ###############################################################################
 #--- SAVING PERFORMANCE STATISTICS --------------------------------------------
 print("\n\nFINAL METRICS: ")
 print("Sampled percentual: ",   np.average(sampled_percent), " +\- ", np.std(sampled_percent))
-print("Accuracy: ",             np.average(accuracy), " +\- ", np.std(accuracy))
+print("Uniform Accuracy: ",      np.average(uniform_accuracy), " +\- ", np.std(uniform_accuracy))
+
 print("Guided Accuracy: ",      np.average(guided_accuracy), " +\- ", np.std(guided_accuracy))
+print("Packing additional error: ", np.average(packing_error), " +\- ", np.std(packing_error))
+
+
+print("Total Accuracy: ",             np.average(accuracy), " +\- ", np.std(accuracy))
+print("Measures additional error: ", np.average(measures_error), " +\- ", np.std(measures_error))
 print("------\n\n\n")
 np.save(output_base_folder_name+"samples_percent.npy",  np.array(sampled_percent))
 np.save(output_base_folder_name+"accuracy.npy",         np.array(accuracy))
+np.save(output_base_folder_name+"guided_accuracy.npy",  np.array(guided_accuracy))
 #------------------------------------------------------------------------------
 ###############################################################################
+
     
