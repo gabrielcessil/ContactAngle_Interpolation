@@ -3,7 +3,7 @@ import Plotter as pl
 import utilities as util
 import time
 import matplotlib.pyplot as plt
-
+import os
 def load_ground_truth_volume(input_file_name, volume_shape, fluid_default_value, solid_default_value):
     """Load the rock volume and return a binary volume representation."""
     volume_ground_truth = np.fromfile(input_file_name, dtype=np.uint8).reshape(volume_shape)
@@ -25,6 +25,7 @@ def load_measures(measure_file_name, measures_format):
     if measures_format=='rad': deg_measures = angles * (180/np.pi)
     else: deg_measures = angles
     
+    deg_measures = 180 -deg_measures
     return coordinates, deg_measures  
 
 def filter_valid_measures(measures_deg):
@@ -72,19 +73,12 @@ def create_guided_sampled_volume(volume_rock, volume_ground_truth, coordinates):
 ###############################################################################
 #--- USER INPUTS --------------------------------------------------------------
 
-# Method setup
-experiment_id       = "SampledDistribution" # Give the experiment a base name
-interpolation_mode  = 'expand_samples' # Use one of: 'nn' 'watershed_grain' 'expand_samples'    
-make_plots          = True 
 
-# Domain convention setup
-fluid_default_value = 1 # Default values for fluid/void cells
-solid_default_value = 0 # Default values for solid cells            
-volume_shape        = (200,200,200) 
 
 # Input files in format: {"desired title for the rock": ("path to rock .raw", "path for rock measures")}
 # :: Ground Truth: must be LBPM Class (0, 1, 74...254)
 # :: Measures must be rads or grad
+"""
 input_files = {
     "Bentheimer_0": 
         ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__0/volume_withAngles.raw",
@@ -125,9 +119,74 @@ input_files = {
     "Bentheimer_9": 
         ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__9/volume_withAngles.raw",
          "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__9/AngleMeasures_filtered.npy"
-         ),    
+         ),  
+    }
+volume_shape        = (200,200,200)
+"""
+"""
+input_files = {
+    "Bentheimer_0": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__0/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__0/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_1": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__1/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__1/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_2": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__2/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__2/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_3": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__3/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__3/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_4": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__4/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__4/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_5": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__5/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__5/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_6": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__6/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__6/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_7": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__7/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__7/AngleMeasures_filtered.npy"
+         ),
+    "Bentheimer_8": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__8/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__8/AngleMeasures_filtered.npy"
+         ),        
+    "Bentheimer_9": 
+        ("/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__9/volume_withAngles.raw",
+         "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__9/AngleMeasures_filtered.npy"
+         ),  
+    }
+volume_shape        = (200,200,200)
+"""
+
+input_files = {
+    "Bentheimer_Val": 
+        (
+        "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/multiWet_rock_Ang_45_135_Shape600x600x600__0/volume_withAngles.raw",
+        "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/multiWet_rock_Ang_45_135_Shape600x600x600__0/AngleMeasures_filtered.npy",
+         ),
 }
-measures_format = 'deg' # 'deg' or 'rad'
+volume_shape        = (600,600,600) 
+# Method setup
+experiment_id       = "SampledDistribution_grain_OilSat" # Give the experiment a base name
+interpolation_mode  = 'expand_samples' # Use one of: 'nn' 'watershed_grain' 'expand_samples'    
+make_plots          = False 
+
+# Domain convention setup
+fluid_default_value = 1 # Default values for fluid/void cells
+solid_default_value = 0 # Default values for solid cells            
+
+measures_format     = 'deg' # 'deg' or 'rad'
 
 # Color labels (Domain plot) in format {cell value: (alpha, Red, Green, Blue)}
 special_colors = {
@@ -181,14 +240,17 @@ for title, (input_file_name, measure_file_name) in input_files.items():
     ideal_centroids     = ideal_centroids[~np.isin(ideal_centroids, [fluid_default_value, solid_default_value])] # Remove solid and void classes
     ideal_centroids_deg = util.LBPM_class_2_value(ideal_centroids)
     # Set measures to class (cluster centroids)
-    measures_deg = util.get_to_GaussianMixture_label(measures_deg, ideal_centroids_deg, fluid_default_value=1, solid_default_value=0)
+    measures_deg_class = util.get_to_GaussianMixture_label(measures_deg, ideal_centroids_deg, fluid_default_value=1, solid_default_value=0)
+
+
+    
     # Compute surface statistics
     print("Computing surface statistics")
     surface_volume = util.Remove_Internal_Solid(volume_rock, fluid_default_value)
     display_surface_stats(surface_volume)
     # Assign valid measures to a solid volume (in LBPM class)
     print("Distributing measures in the surface")
-    sampled_volume, valid_coordinates = create_sampled_volume(volume_rock, coordinates, measures_deg, valid_mask)
+    sampled_volume, valid_coordinates = create_sampled_volume(volume_rock, coordinates, measures_deg_class, valid_mask)
     #------------------------------------------------------------------------------
     ###############################################################################        
     
@@ -209,14 +271,22 @@ for title, (input_file_name, measure_file_name) in input_files.items():
     print("Volume GUIDED interpolation: Ending Computation") 
     # Uniform Interpolation: what the interpolation looks like if the samples are perfectly measured and uniformly distributed along the surface
     print("Volume UNIFORM interpolation: Starting computation")
-    sampled_fraction = len(measures_deg)/np.count_nonzero(surface_volume==solid_default_value)
+    sampled_fraction = len(measures_deg_class)/np.count_nonzero(surface_volume==solid_default_value)
     uniform_sampled_volume = util.Keep_random_samples(volume_ground_truth, kept_fraction=sampled_fraction, solid_value=solid_default_value, fluid_value=fluid_default_value)
     uniform_interpolated_volume = util.GET_INTERPOLATED_DOMAIN(uniform_sampled_volume, interpolation_mode, fluid_default_value, solid_default_value)
     print("Volume UNIFORM interpolation: Ending Computation") 
+    
+    # CLustering sanity check:
+    #i_s = coordinates[0,:]
+    #j_s = coordinates[1,:]
+    #k_s = coordinates[2,:]
+    #for a,b, i, j, k in zip(measures_deg, measures_deg_class, i_s, j_s, k_s): print(round(a,3), "->", b, " guided is ", guided_sampled_volume[i,j,k], ", sampled is ", sampled_volume[i,j,k])
+    
     #------------------------------------------------------------------------------
     ###############################################################################   
     
     output_base_file_name = output_base_folder_name+title+"/"
+    os.makedirs(os.path.dirname(output_base_file_name), exist_ok=True)
     
     ###############################################################################
     #--- MAKING PLOTS --------------------------------------------------------------
@@ -293,7 +363,6 @@ for title, (input_file_name, measure_file_name) in input_files.items():
     #------------------------------------------------------------------------------
     ###############################################################################
     
-    break
 
 ###############################################################################
 #--- SAVING PERFORMANCE STATISTICS --------------------------------------------

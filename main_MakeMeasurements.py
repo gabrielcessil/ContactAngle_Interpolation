@@ -10,62 +10,90 @@ import os
 #######################################################
 
 # Morph drain array
-#input_file_name     = "/home/gabriel/Desktop/Molhabilidade/ContactAngle_Interpolation-main --- INTERPORE TEST CODE/Slide Images/Exemplo Medicoes/benthheimer_200x200x200__0_volume_final_morphodrain.raw"
+# Grain-based simulated domains
+"""
 input_file_names = [
-    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__0/id_t1000000.raw"
-    #"/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__1/id_t1000000.raw",
-    #"/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__2/id_t1000000.raw",
-    #"/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__3/id_t1000000.raw",
-    #"/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__4/id_t1000000.raw",
-    #"/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__5/id_t1000000.raw",
-    #"/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__6/id_t1000000.raw",
-    #"/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__7/id_t1000000.raw",
-    #"/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__8/id_t1000000.raw",
-    #"/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__9/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__0/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__1/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__2/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__3/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__4/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__5/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__6/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__7/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__8/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_grains_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__9/id_t1000000.raw",
 ]
 volume_shape        = (200,200,200)
-make_plots = True
+"""
+
+# Pore-based simulated domains
+"""
+input_file_names = [
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__0/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__1/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__2/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__3/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__4/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__5/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__6/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__7/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__8/id_t1000000.raw",
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/bentheimer_900_900_1600_pores_distribution/multiWet_rock_Ang_45_135_Shape200x200x200__9/id_t1000000.raw",
+]
+volume_shape        = (200,200,200)
+"""
+
+# Grain-based simulated domains for Validation (Flooding)
+input_file_names = [
+    "/home/gabriel/remote/hal/Interpore_Wettability_Rocks/multiWet_rock_Ang_45_135_Shape600x600x600__0/id_t400000.raw",
+]
+volume_shape        = (600,600,600)
+
+
+# Routines to be executed
+make_plots          = False
+make_measurements   = True
+
+
 
 
 #######################################################
 #************ RUN MEASURING ALGORITHM:     ***********#
 #######################################################
 
-"""
-for input_file_name in input_file_names:
-    print("Processing ", input_file_name)
-    morph_drain         = np.fromfile(input_file_name, dtype=np.uint8).reshape(volume_shape)
-    morph_drain[(morph_drain != 1) & (morph_drain != 2)]          = 0
-    
-    ## Sanity check: THE LPBM RAW MATCHES THE GROUND TRUTH?
-    orig_volume         = np.fromfile(os.path.dirname(input_file_name)+"/volume.raw", dtype=np.uint8).reshape(volume_shape)
-    if np.mean(abs(morph_drain[orig_volume==0]))!=0: raise Exception("Simulation do not match ground truth volume.")
+if make_measurements:
+    for input_file_name in input_file_names:
+        print("Processing ", input_file_name)
+        morph_drain         = np.fromfile(input_file_name, dtype=np.uint8).reshape(volume_shape)
+        morph_drain[(morph_drain != 1) & (morph_drain != 2)]          = 0 # Set any kind of solid to default solid
         
+        ## Sanity check: THE LPBM RAW MATCHES THE GROUND TRUTH?
+        orig_volume         = np.fromfile(os.path.dirname(input_file_name)+"/volume.raw", dtype=np.uint8).reshape(volume_shape)
+        if np.mean(abs(morph_drain[orig_volume==0]))!=0: raise Exception("Simulation do not match ground truth volume.")
+            
+        
+        # Load measuring method
+        file_dir = '/home/gabriel/Desktop/Molhabilidade/Metodo Medida Cris/' # Folder of where the library file is located. 
+        sys.path.append(file_dir)
+        import Lib_ContactAngle as esf
+        os.chdir(os.path.dirname(os.path.abspath(__file__)))
+        
+        # Measurement parameters
+        R1                      = 5     # Plane regression subvolume radius
+        alpha                   = 0.5   # Sphere regression subvbolume radius scaling factors
+        Max_residual_plane      = 0.4
+        Max_residual_sphere     = 0.5
+        Min_points_plane        = 0.5
+        Min_points_sphere       = 20 
+        # Measure contact angles
+        Measurements            = esf.MeasureAngle(morph_drain)
+        Filtered_Measurements   = esf.FilterMeasurements(Measurements, R1 = R1, mpe = Min_points_sphere, mpp = Min_points_plane, maxerr_e = Max_residual_sphere, maxerr_p = Max_residual_plane)
+            
+        # Save results:
+        np.save(os.path.dirname(input_file_name)+"/AngleMeasures.npy", Measurements[0:4, :])
+        np.save(os.path.dirname(input_file_name)+"/AngleMeasures_filtered.npy", Filtered_Measurements[0:4, :])
     
-    # Load measuring method
-    file_dir = '/home/gabriel/Desktop/Molhabilidade/Metodo Medida Cris/' # Folder of where the library file is located. 
-    sys.path.append(file_dir)
-    import Lib_ContactAngle as esf
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    
-    # Measurement parameters
-    R1                      = 5     # Plane regression subvolume radius
-    alpha                   = 0.5   # Sphere regression subvbolume radius scaling factors
-    Max_residual_plane      = 0.4
-    Max_residual_sphere     = 0.5
-    Min_points_plane        = 0.5
-    Min_points_sphere       = 20 
-    # Measure contact angles
-    Measurements            = esf.MeasureAngle(morph_drain)
-    Filtered_Measurements   = esf.FilterMeasurements(Measurements, R1 = R1, mpe = Min_points_sphere, mpp = Min_points_plane, maxerr_e = Max_residual_sphere, maxerr_p = Max_residual_plane)
-    
-
-    
-    # Save results:
-    np.save(os.path.dirname(input_file_name)+"/AngleMeasures.npy", Measurements[0:4, :])
-    np.save(os.path.dirname(input_file_name)+"/AngleMeasures_filtered.npy", Filtered_Measurements[0:4, :])
-"""
-
     
 
 ########################################################
@@ -86,9 +114,6 @@ if make_plots:
         coord_x = Measurements[1,:].astype(int)
         coord_y = Measurements[2,:].astype(int)
         coord_z = Measurements[3,:].astype(int)
-        
-        #for i,j,k in zip( coord_x, coord_y, coord_z):
-        #    print(i,j,k, orig_volume[k,i,j])
         
         volume              = morph_drain.copy()
         solid_mask          = (morph_drain != 1) & (morph_drain != 2)
@@ -208,5 +233,3 @@ if make_plots:
         print("Measured cells: ",   Measurements_filtered.shape[1])
         print(Measurements_filtered.shape[1])
         print("(Measured /Surface cells) %: ", 100*Measurements_filtered.shape[1]/np.count_nonzero(hollow_volume==0))
-        
-        break

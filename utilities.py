@@ -977,7 +977,6 @@ def get_to_GaussianMixture_label(measures_deg, ideal_centroids_deg, fluid_defaul
     plt.savefig("clustered_histogram.svg", dpi=300)
     plt.show()
     
-    
     return measures_ideal_centroids
     
     

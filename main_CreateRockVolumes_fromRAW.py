@@ -218,12 +218,9 @@ def filter_connected_labels(connected_labels, valid_labels, sub_shape=()):
                     
 
 # Loading entire rock
-
 input_file_name = r"Rock Volumes/bentheimer_900_900_1600.raw"
 volume_shape    = (1600, 900, 900)
 volume          = np.fromfile(input_file_name, dtype=np.uint8).reshape(volume_shape)
-
-
 fluid_default       = 1
 solid_default       = 0
 
@@ -233,25 +230,33 @@ volume[volume==2]   = fluid_default
 volume[volume==255] = solid_default
 volume[volume==254] = solid_default
 
+"""
+# For sampled distribution verification:
 N                   = 10
 slice_shape         = (200, 200, 200)
+filter_cube         = (50,50,50)
+"""
+# For multi-phase phenomena verification:
+N                   = 1
+slice_shape         = (600, 600, 600)
+filter_cube         = (50,50,50)
 
 cluster_mode        = 'grains' # 'grains' or 'pores'
 
 angles              = [45, 135]
 probabilities       = [0.5, 0.5]
-
 labels              = { 0:      "Original Solid Cells",
                         1:      "Void Space Cells",
                         45:     "Water-Wetting Cells (45º)",
                         135:    "Oil-Wetting Cells (135º)",}
-
 special_colors      = {
     0: (0.5, 0.5, 0.5, 1.0), # Assign grey for solid cells
     1: (0.0, 0.0, 0.0, 1.0)  # Assign black for void cells (removed from plot)
 }
 
-
+create_domains          = True
+make_plots              = True
+create_execution_files  = True
 
 
 # Converting labels values to LBPM class
@@ -263,150 +268,154 @@ random.seed(42)  # Use any integer you like; 42 is a common example
 slices = extract_non_overlapping_slices(volume, slice_shape)
 slices = random.sample(slices, N)
 
-for i, volume_slice in enumerate(slices):
-    
-    print("Creating domain ", i)
-    volume_final = volume_slice.copy()
-    s_x, s_y, s_z = volume_slice.shape
-    rock_name = input_file_name.replace(".raw", "")
-    angles_str = "_" + "_".join(str(v) for v in angles)
-    file_path = f"{rock_name}_{cluster_mode}_distribution/multiWet_rock_Ang{angles_str}_Shape{s_x}x{s_y}x{s_z}__{i}"
-    
-    if cluster_mode == 'grains':
-        #volume_to_cluster = (volume_slice != fluid_default).astype(np.uint8)
-        #connected_labels, valid_labels, distance_map, local_max = util.Watershed(volume_to_cluster)
+filter_cube = tuple(int(size) for size in filter_cube)
+if create_domains:
+    for i, volume_slice in enumerate(slices):
         
-        #filter_cube = np.maximum(np.array(slice_shape)/4,1)
-        #connected_labels, valid_labels = filter_connected_labels(connected_labels, valid_labels, filter_cube.astype(int))
+        print("Creating domain ", i)
+        volume_final = volume_slice.copy()
+        s_x, s_y, s_z = volume_slice.shape
+        rock_name = input_file_name.replace(".raw", "")
+        angles_str = "_" + "_".join(str(v) for v in angles)
+        file_path = f"{rock_name}_{cluster_mode}_distribution/multiWet_rock_Ang{angles_str}_Shape{s_x}x{s_y}x{s_z}__{i}"
         
-        """
-        pl.Plot_Classified_Domain(
-            connected_labels, 
-            file_path+"_clusters", 
-            remove_value=[np.min(connected_labels)],
-            labels=labels,
-            colormap='hsv'
-        )
-        """
-        
+        if cluster_mode == 'grains':
+            volume_to_cluster = (volume_slice != fluid_default).astype(np.uint8)
+            connected_labels, valid_labels, distance_map, local_max = util.Watershed(volume_to_cluster)
+            connected_labels, valid_labels = filter_connected_labels(connected_labels, valid_labels, filter_cube)
             
-    elif cluster_mode == 'pores':
-        #volume_to_cluster = fluid_default-(volume_slice != fluid_default).astype(np.uint8)
-        #connected_labels, valid_labels, distance_map, local_max = util.Watershed(volume_to_cluster)
+            if make_plots:
+                pl.Plot_Classified_Domain(
+                    connected_labels, 
+                    file_path+"_clusters", 
+                    remove_value=[np.min(connected_labels)],
+                    labels=labels,
+                    colormap='hsv'
+                )
+                
+            
+                
+        elif cluster_mode == 'pores':
+            volume_to_cluster = fluid_default-(volume_slice != fluid_default).astype(np.uint8)
+            connected_labels, valid_labels, distance_map, local_max = util.Watershed(volume_to_cluster)
+             
+            if make_plots:
+                pl.Plot_Classified_Domain(
+                    values=connected_labels, 
+                    filename = file_path+"_clusters_BeforeFiltering",
+                    show_label=False,
+                    special_colors=special_colors,
+                    colormap='hsv')
+                
+            filter_cube                     = np.maximum(np.array(slice_shape)/2,1)
+            connected_labels, valid_labels  = filter_connected_labels(connected_labels, valid_labels, filter_cube.astype(int))
+            
+            if make_plots:
+                pl.Plot_Classified_Domain(
+                    values=connected_labels, 
+                    filename = file_path+"_clusters_AfterFiltering",
+                    show_label=False,
+                    special_colors=special_colors,
+                    colormap='hsv'
+                    )
+            
+            hollow_volume           = util.Remove_Internal_Solid(volume_slice, connectivity=3)
+            connected_labels        = util.Set_Solid_to_Void_Label(hollow_volume, connected_labels, valid_labels, connectivity=3)
+            non_surface_solid_mask  = (volume_slice != fluid_default) & (hollow_volume!=solid_default)
+            fluid_mask              = volume_slice == fluid_default
+            connected_labels[non_surface_solid_mask]    = min(valid_labels)-1  # Set the solids to a unvalid label, so it dont get in raffle
+            connected_labels[fluid_mask]                = min(valid_labels)-2  # Set the fluid to a unvalid label, so it dont get in raffle
+            
+            if make_plots:
+                pl.Plot_Classified_Domain(
+                    values   = connected_labels, 
+                    filename = file_path+"_clusters_AfterFiltering_onSurface",
+                    show_label=False,
+                    remove_value=[min(valid_labels)-1],
+                    colormap='hsv',
+                    special_colors={min(valid_labels)-1: (0.5, 0.5, 0.5, 1.0),  min(valid_labels)-2: (0.0, 0.0, 0.0, 1.0)},
+                )
+            """
+            aux_local_max = volume_slice.copy()
+            aux_local_max[local_max] = 10
+            pl.Plot_Classified_Domain(
+                values=aux_local_max, 
+                filename = file_path+"_local_max",
+                labels={1: "Void Space cells", 0: "Solid Cells", 10: "Distance Transform's Local Maximum"},
+                show_label=True,
+                colormap='prism',
+                special_colors=special_colors
+                )
+            pl.Plot_Classified_Domain(
+                values=volume_slice, 
+                filename = file_path+"_volume",
+                labels={fluid_default: "Void Space Cells", solid_default: "Solid Cells"},
+                show_label=True,
+                special_colors=special_colors
+                )
+            
+            pl.Plot_Classified_Domain(
+                values=distance_map, 
+                filename = file_path+"_distance_map",
+                special_colors={0: special_colors[0]},
+                colormap='inferno_r',
+                show_label=False,
+                )
+            """
+                
+        else:
+            raise Exception("Not implemented")
+        
+        # Filter result
+        print(" - Filtering results")
+        
+        
+        # Raffle contact angles across clusters
+        for label in valid_labels:
+            angle = random.choices(angles, weights=probabilities, k=1)[0]  # Choose angle with weights
+            angle_class = util.value_2_LBPM_class(angle)
+            group_mask  = connected_labels == label
+            volume_final[group_mask] = angle_class
+    
+        
+        # Save plots
+        print(" - Plotting")
+        if make_plots:
+            if slice_shape[0]==1:
+                pl.Plot_Classified_Domain_2D(
+                    values=volume_final, 
+                    filename = file_path+"_volume_final",
+                    labels=labels,
+                    show_label=True,
+                    special_colors=special_colors
+                    )    
+            else:
+                pl.Plot_Classified_Domain(
+                    volume_final, 
+                    file_path+"_volume_final", 
+                    remove_value=[fluid_default],
+                    labels=labels,
+                    special_colors=special_colors
+                )
          
-        """
-        pl.Plot_Classified_Domain(
-        values=connected_labels, 
-        filename = file_path+"_clusters_BeforeFiltering",
-        show_label=False,
-        special_colors=special_colors,
-        colormap='hsv')
-        """
-        #filter_cube = np.maximum(np.array(slice_shape)/2,1)
-        #connected_labels, valid_labels = filter_connected_labels(connected_labels, valid_labels, filter_cube.astype(int))
+        # Save volume 
+        print(" - Saving")
+        if not os.path.exists(file_path+"/"): os.makedirs(file_path+"/")
+        volume_final = volume_final.astype(np.uint8)
+        volume_final.tofile(file_path + "/volume_withAngles.raw")
+        volume_slice.tofile(file_path + "/volume.raw")
         
-        """
-        pl.Plot_Classified_Domain(
-            values=connected_labels, 
-            filename = file_path+"_clusters_AfterFiltering",
-            show_label=False,
-            special_colors=special_colors,
-            colormap='hsv'
-            )
-        """
+       
         
-        
-        #hollow_volume       = util.Remove_Internal_Solid(volume_slice, connectivity=3)
-        #connected_labels    = util.Set_Solid_to_Void_Label(hollow_volume, connected_labels, valid_labels, connectivity=3)
-        
-        #non_surface_solid_mask  = (volume_slice != fluid_default) & (hollow_volume!=solid_default)
-        #fluid_mask              = volume_slice == fluid_default
-        #connected_labels[non_surface_solid_mask]    = min(valid_labels)-1  # Set the solids to a unvalid label, so it dont get in raffle
-        #connected_labels[fluid_mask]                = min(valid_labels)-2  # Set the fluid to a unvalid label, so it dont get in raffle
-        
-        """
-        pl.Plot_Classified_Domain(
-            values   = connected_labels, 
-            filename = file_path+"_clusters_AfterFiltering_onSurface",
-            show_label=False,
-            remove_value=[min(valid_labels)-1],
-            colormap='hsv',
-            special_colors={min(valid_labels)-1: (0.5, 0.5, 0.5, 1.0),  min(valid_labels)-2: (0.0, 0.0, 0.0, 1.0)},
-            )
 
-        aux_local_max = volume_slice.copy()
-        aux_local_max[local_max] = 10
-        pl.Plot_Classified_Domain(
-            values=aux_local_max, 
-            filename = file_path+"_local_max",
-            labels={1: "Void Space cells", 0: "Solid Cells", 10: "Distance Transform's Local Maximum"},
-            show_label=True,
-            colormap='prism',
-            special_colors=special_colors
-            )
-        pl.Plot_Classified_Domain(
-            values=volume_slice, 
-            filename = file_path+"_volume",
-            labels={fluid_default: "Void Space Cells", solid_default: "Solid Cells"},
-            show_label=True,
-            special_colors=special_colors
-            )
-        
-        pl.Plot_Classified_Domain(
-            values=distance_map, 
-            filename = file_path+"_distance_map",
-            special_colors={0: special_colors[0]},
-            colormap='inferno_r',
-            show_label=False,
-            )
-        """
-            
-    else:
-        raise Exception("Not implemented")
-    
-    # Filter result
-    print(" - Filtering results")
-    
-    
-    # Raffle contact angles across clusters
-    # Raffle contact angles across clusters
-    #for label in valid_labels:
-    #    angle = random.choices(angles, weights=probabilities, k=1)[0]  # Choose angle with weights
-    #    angle_class = util.value_2_LBPM_class(angle)
-    #    group_mask  = connected_labels == label
-    #    volume_final[group_mask] = angle_class
-
-    
-    # Save plots
-    """
-    print(" - Plotting")
-    if slice_shape[0]==1:
-        
-        pl.Plot_Classified_Domain_2D(
-            values=volume_final, 
-            filename = file_path+"_volume_final",
-            labels=labels,
-            show_label=True,
-            special_colors=special_colors
-            )    
-    else:
-        pl.Plot_Classified_Domain(
-            volume_final, 
-            file_path+"_volume_final", 
-            remove_value=[fluid_default],
-            labels=labels,
-            special_colors=special_colors
-        )
-    """
-     
-    # Save volume 
-    #print(" - Saving")
-    #if not os.path.exists(file_path+"/"): os.makedirs(file_path+"/")
-    #volume_final = volume_final.astype(np.uint8)
-    #volume_final.tofile(file_path + "/volume_withAngles.raw")
-    #volume_slice.tofile(file_path + "/volume.raw")
-    
-    if not os.path.exists(file_path+"/"): os.makedirs(file_path+"/")
-    
-    write_lbpm_db(path_name = file_path+"/")
-    write_slurm_script(path_name = file_path+"/")
+if create_execution_files:
+    for i, volume_slice in enumerate(slices):
+        print("Creating domain ", i)
+        volume_final    = volume_slice.copy()
+        s_x, s_y, s_z   = volume_slice.shape
+        rock_name = input_file_name.replace(".raw", "")
+        angles_str = "_" + "_".join(str(v) for v in angles)
+        file_path = f"{rock_name}_{cluster_mode}_distribution/multiWet_rock_Ang{angles_str}_Shape{s_x}x{s_y}x{s_z}__{i}"
+        if not os.path.exists(file_path+"/"): os.makedirs(file_path+"/")
+        write_lbpm_db(path_name = file_path+"/")
+        write_slurm_script(path_name = file_path+"/")

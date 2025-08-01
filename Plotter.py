@@ -43,18 +43,16 @@ def Plot_Domain(values, filename, remove_value=[], colormap='cool', lbpm_class=T
     
     # Convert to an unstructured grid for filtering
     mesh = grid.cast_to_unstructured_grid()
-
     # Remove unwanted cells: OK
     for removed_value in remove_value:
         to_remove_mask = np.argwhere(mesh["values"] == removed_value)
         mesh.remove_cells(to_remove_mask.flatten(), inplace=True)
-
+        
     # Separate different cell types
     special_cells = {}
     for value, color in special_colors.items():
         special_cells[value] = (mesh.extract_cells(np.where(mesh["values"] == value)[0]), color)
 
-    
     # After locating fluid and solid, the values can be converted back to LBPM class
     other_cells_mask = np.where((mesh["values"] != 0) & (mesh["values"] != 1))[0]
     if lbpm_class: grid.cell_data["values"] = LBPM_class_2_value(grid.cell_data["values"])
@@ -62,7 +60,6 @@ def Plot_Domain(values, filename, remove_value=[], colormap='cool', lbpm_class=T
     
     # Configure the plotter
     plotter = pv.Plotter(window_size=[1920, 1080], off_screen=True)
-
     # Plot other cells with the colormap
     if other_cells.n_cells > 0:
         plotter.add_mesh(
@@ -85,7 +82,7 @@ def Plot_Domain(values, filename, remove_value=[], colormap='cool', lbpm_class=T
                 "n_labels": 10,
             },
         )
-        
+    
     for value, (cells, color) in special_cells.items():
         if cells.n_cells > 0:
             plotter.add_mesh(cells, color=color, show_scalar_bar=False)
@@ -100,10 +97,8 @@ def Plot_Domain(values, filename, remove_value=[], colormap='cool', lbpm_class=T
         n_xlabels=4, n_ylabels=4, n_zlabels=4,
         font_size=15, xtitle='x', ytitle='y', ztitle='z'
     )
-
     # Show the visualization
     plotter.show(auto_close=False)
-
     # Save the visualization as an image
     plotter.screenshot(filename + ".png")
     plotter.save_graphic( filename + ".svg", raster=True, painter=True)
@@ -295,7 +290,7 @@ def Plot_Classified_Domain(values, filename, remove_value=[], labels={}, colorma
     plotter.show(auto_close=False)
 
     # Save the visualization as an image
-    plotter.screenshot(filename + ".png",  transparent_background=True)
+    plotter.screenshot(filename + ".png",  transparent_background=False)
     plotter.save_graphic( filename + ".svg", raster=False, painter=False)
     plotter.close()
     
@@ -788,6 +783,7 @@ def plot_multiple_mean_deviation(curve_dict,
         os.makedirs(output_dir)
 
     plt.savefig(filename + ".svg", dpi=300, bbox_inches="tight")
+    plt.savefig(filename + ".png", dpi=300, bbox_inches="tight")
     plt.show()
     plt.close(fig)
     
